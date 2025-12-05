@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """USB/IP server implementation for sharing USB devices over the network."""
 
+import logging
 import socket
 import struct
 import threading
-import logging
-from typing import Callable
 
 import usb.core
 import usb.util

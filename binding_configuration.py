@@ -36,7 +36,7 @@ class BindingConfiguration:
         """Create an empty configuration file with the root element."""
         root = ET.Element("usbipd")
         root.set("version", "1.0")
-        bindings = ET.SubElement(root, "bindings")
+        ET.SubElement(root, "bindings")
         self._write_config(root)
 
     def _write_config(self, root: ET.Element) -> None:
