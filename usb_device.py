@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """USB device wrapper module for usbipd."""
 
+import usb.backend.libusb1 as libusb1
 import usb.core
 import usb.util
 
@@ -27,6 +28,9 @@ class USBDevice:
         """
         Find a USB device by its bus ID.
 
+        Uses a fresh libusb backend to ensure devices that went idle
+        are properly re-enumerated.
+
         Args:
             bus_id: The bus ID in format 'bus-port.port...' (e.g., '1-4.3').
 
@@ -47,7 +51,9 @@ class USBDevice:
                 "Expected format: bus-port.port... (e.g., 1-4.3)"
             ) from error
 
-        devices = usb.core.find(find_all=True)
+        # Create a fresh backend to force re-enumeration of USB devices
+        backend = libusb1.get_backend()
+        devices = usb.core.find(find_all=True, backend=backend)
         for device in devices:
             device_port_numbers = device.port_numbers if device.port_numbers else (0,)
             if device.bus == target_bus and device_port_numbers == target_port_numbers:
