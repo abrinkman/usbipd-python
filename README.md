@@ -11,7 +11,7 @@ Copilot assistance. It seems to work, more or less, for simple USB devices like 
 
 ## Preparing the environment
 
-Make sure you have a Python environment present, with the required packages present. Or create a venv:
+Make sure you have a Python environment, with the required packages present. Or create a venv:
 
 1. Create venv:
    ```bash
