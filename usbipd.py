@@ -83,10 +83,10 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
         serial_number = (
             _clean_usb_string(usb.util.get_string(device, device.iSerialNumber))
             if device.iSerialNumber
-            else "N/A"
+            else ""
         )
     except (usb.core.USBError, ValueError):
-        serial_number = "N/A"
+        serial_number = ""
 
     # Use full port path for unique bus ID (e.g., 1-4.3 for bus 1, port 4, port 3)
     if device.port_numbers:
@@ -148,11 +148,14 @@ def print_usb_devices(devices: list[dict], config: BindingConfiguration) -> None
 
     for device in devices:
         vid_pid = f"{device['vendor_id']}:{device['product_id']}"
-        state = "Bound" if config.is_bound(device["bus_id"]) else "Not bound"
+        is_device_bound = config.is_bound(
+            device["vendor_id"], device["product_id"], device["serial_number"]
+        )
+        state = "Bound" if is_device_bound else "Not bound"
         bus_id = device["bus_id"][:14]
         manufacturer = device["manufacturer"][:20]
         product = device["product"][:26]
-        serial = device["serial_number"][:20]
+        serial = device["serial_number"][:20] if device["serial_number"] else "N/A"
         print(
             f"{bus_id:<14} "
             f"{vid_pid:<12} "
@@ -177,6 +180,9 @@ def command_bind(bus_id: str) -> None:
     """
     Handle the 'bind' command to bind a USB device for sharing.
 
+    The device is identified by bus ID but stored using VID:PID:serial
+    for persistent identification across reconnects.
+
     Args:
         bus_id: The bus ID of the device to bind (format: bus-port, e.g., 1-3).
     """
@@ -184,16 +190,24 @@ def command_bind(bus_id: str) -> None:
         usb_device = USBDevice(bus_id)
         device_info = usb_device.get_basic_info()
 
-        # Save binding to configuration
+        # Clean serial number (remove null chars and use empty string if N/A)
+        serial_number = device_info["serial_number"]
+        if serial_number:
+            serial_number = serial_number.split("\x00")[0]
+
+        # Save binding to configuration using VID:PID:serial
         config = BindingConfiguration()
         added = config.add_binding(
-            bus_id=device_info["bus_id"],
             vendor_id=device_info["vendor_id"],
             product_id=device_info["product_id"],
+            serial_number=serial_number,
         )
 
         if added:
-            print(f"Device bound successfully: {bus_id}")
+            device_id = f"{device_info['vendor_id']}:{device_info['product_id']}"
+            if serial_number:
+                device_id += f":{serial_number}"
+            print(f"Device bound successfully: {device_id} (at {bus_id})")
             print(usb_device.get_device_information())
         else:
             print(f"Device is already bound: {bus_id}")
@@ -208,6 +222,9 @@ def command_bind(bus_id: str) -> None:
 def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
     """
     Handle the 'unbind' command to remove USB device binding(s).
+
+    The bus ID is used to identify the device, but the binding is removed
+    based on VID:PID:serial stored in the configuration.
 
     Args:
         bus_id: The bus ID of the device to unbind (format: bus-port.port..., e.g., 1-4.3).
@@ -227,13 +244,73 @@ def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
         print("Error: --bus-id or --all is required.", file=sys.stderr)
         sys.exit(1)
 
-    removed = config.remove_binding(bus_id)
+    # Look up the device to get its VID:PID:serial
+    try:
+        usb_device = USBDevice(bus_id)
+        device_info = usb_device.get_basic_info()
+        serial_number = device_info["serial_number"]
+        if serial_number:
+            serial_number = serial_number.split("\x00")[0]
 
-    if removed:
-        print(f"Device unbound successfully: {bus_id}")
-    else:
-        print(f"Device is not bound: {bus_id}")
+        removed = config.remove_binding(
+            device_info["vendor_id"], device_info["product_id"], serial_number
+        )
+
+        if removed:
+            device_id = f"{device_info['vendor_id']}:{device_info['product_id']}"
+            if serial_number:
+                device_id += f":{serial_number}"
+            print(f"Device unbound successfully: {device_id} (at {bus_id})")
+        else:
+            print(f"Device is not bound: {bus_id}")
+            sys.exit(1)
+    except (ValueError, LookupError) as error:
+        print(f"Error: {error}", file=sys.stderr)
         sys.exit(1)
+
+
+def _find_device_by_binding(binding: dict) -> tuple[str, usb.core.Device] | None:
+    """
+    Find a connected USB device matching the binding's VID:PID:serial.
+
+    Args:
+        binding: A binding dictionary with vendor_id, product_id, and serial_number.
+
+    Returns:
+        A tuple of (bus_id, device) if found, None otherwise.
+    """
+    backend = libusb1.get_backend()
+    devices = usb.core.find(find_all=True, backend=backend)
+
+    target_vid = int(binding["vendor_id"], 16)
+    target_pid = int(binding["product_id"], 16)
+    target_serial = binding.get("serial_number", "")
+
+    for device in devices:
+        if device.idVendor != target_vid or device.idProduct != target_pid:
+            continue
+
+        # Get device serial number
+        device_serial = ""
+        try:
+            if device.iSerialNumber:
+                device_serial = usb.util.get_string(device, device.iSerialNumber)
+                if device_serial:
+                    device_serial = device_serial.split("\x00")[0]
+        except (usb.core.USBError, ValueError):
+            pass
+
+        # Match: both have no serial, or serials match
+        if target_serial == device_serial:
+            # Build bus ID
+            if device.port_numbers:
+                port_path = ".".join(str(p) for p in device.port_numbers)
+                bus_id = f"{device.bus}-{port_path}"
+            else:
+                bus_id = f"{device.bus}-0"
+            return (bus_id, device)
+
+    return None
 
 
 def command_start() -> None:
@@ -252,15 +329,24 @@ def command_start() -> None:
 
     exported_count = 0
     for binding in bindings:
-        bus_id = binding["bus_id"]
+        device_id = f"{binding['vendor_id']}:{binding['product_id']}"
+        if binding.get("serial_number"):
+            device_id += f":{binding['serial_number']}"
+
+        result = _find_device_by_binding(binding)
+        if result is None:
+            print(f"Warning: Device {device_id} not found", file=sys.stderr)
+            continue
+
+        bus_id, device = result
         try:
-            usb_device = USBDevice(bus_id)
-            server.export_device(bus_id, usb_device.device)
-            print(f"Exported device: {bus_id}")
+            server.export_device(bus_id, device)
+            print(f"Exported device: {device_id} (at {bus_id})")
             exported_count += 1
         except (ValueError, LookupError) as error:
             print(
-                f"Warning: Could not export device {bus_id}: {error}", file=sys.stderr
+                f"Warning: Could not export device {device_id}: {error}",
+                file=sys.stderr,
             )
 
     if exported_count == 0:
@@ -317,6 +403,7 @@ def main() -> None:
         help="Bus ID of the device to unbind (format: bus-port.port..., e.g., 1-4.3)",
     )
     unbind_group.add_argument(
+        "-a",
         "--all",
         action="store_true",
         dest="unbind_all",
