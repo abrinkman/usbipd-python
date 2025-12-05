@@ -1,5 +1,9 @@
 # usbipd-python
 
+[![Downloads](https://img.shields.io/github/downloads/abrinkman/usbipd-python/total)](https://github.com/abrinkman/usbipd-python/releases)
+[![REUSE Compliant](https://img.shields.io/badge/reuse-compliant-green.svg)](https://reuse.software/)
+[![Lint](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml/badge.svg)](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml)
+
 A USB/IP server written in Python for sharing USB devices over the network, based on usbipd concepts. Works on MacOS using the `pyusb` library, but any system that supports `pyusb` should work.
 
 Note: this is a very early proof-of-concept implementation, which was mainly built for learning purposes with
