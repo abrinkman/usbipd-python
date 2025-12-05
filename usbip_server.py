@@ -602,18 +602,20 @@ class USBIPServer:
                 is_device_to_host = (bmRequestType & 0x80) != 0
                 if not is_device_to_host:
                     # Host to Device (OUT) - read the data
-                    transfer_buffer = self._recv_exact(
+                    recv_result = self._recv_exact(
                         client_socket, transfer_buffer_length
                     )
-                    if transfer_buffer is None:
+                    if recv_result is None:
                         return
+                    transfer_buffer = recv_result
             elif direction == USBIP_DIR_OUT:
                 # Bulk/Interrupt OUT - read the data
-                transfer_buffer = self._recv_exact(
+                recv_result = self._recv_exact(
                     client_socket, transfer_buffer_length
                 )
-                if transfer_buffer is None:
+                if recv_result is None:
                     return
+                transfer_buffer = recv_result
 
         # Execute the USB transfer
         actual_length = 0
