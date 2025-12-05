@@ -85,7 +85,18 @@ sudo ./usbipd.py start              # Start server (requires root on macOS)
 - `libusb` installed (`brew install libusb` on macOS)
 - Root/sudo access for USB device claiming
 
+### Linting and Formatting
+- Use `ruff` for linting and formatting.
+- Run `ruff check .` to check for linting issues.
+- Run `ruff format .` to format code.
+- Always verify changes pass both checks before completing work.
+
 ### Testing
 - Write unit tests for core functionality.
 - Use `pytest` as the test framework.
 - Mock USB device interactions in tests.
+
+## Verification
+- **Linting**: Run `ruff check .` to ensure no linting errors.
+- **Formatting**: Run `ruff format --check .` to ensure code is properly formatted.
+- **Type Checking**: Run `mypy --ignore-missing-imports .` to verify type hints.
