@@ -173,6 +173,24 @@ class BindingConfiguration:
         """
         return self.get_binding(bus_id) is not None
 
+    def clear_all_bindings(self) -> int:
+        """
+        Remove all device bindings from the configuration.
+
+        Returns:
+            The number of bindings that were removed.
+        """
+        root = self._load_config()
+        bindings = root.find("bindings")
+
+        if bindings is None:
+            return 0
+
+        device_count = len(bindings.findall("device"))
+        bindings.clear()
+        self._write_config(root)
+        return device_count
+
     def _device_element_to_dict(self, device: ET.Element) -> dict:
         """
         Convert a device XML element to a dictionary.

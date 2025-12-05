@@ -171,14 +171,28 @@ def command_bind(bus_id: str) -> None:
         sys.exit(1)
 
 
-def command_unbind(bus_id: str) -> None:
+def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
     """
-    Handle the 'unbind' command to remove a USB device binding.
+    Handle the 'unbind' command to remove USB device binding(s).
 
     Args:
-        bus_id: The bus ID of the device to unbind (format: bus-port, e.g., 1-3).
+        bus_id: The bus ID of the device to unbind (format: bus-port.port..., e.g., 1-4.3).
+        unbind_all: If True, remove all bindings.
     """
     config = BindingConfiguration()
+
+    if unbind_all:
+        count = config.clear_all_bindings()
+        if count > 0:
+            print(f"Removed {count} device binding(s).")
+        else:
+            print("No devices were bound.")
+        return
+
+    if not bus_id:
+        print("Error: --bus-id or --all is required.", file=sys.stderr)
+        sys.exit(1)
+
     removed = config.remove_binding(bus_id)
 
     if removed:
@@ -261,10 +275,16 @@ def main() -> None:
 
     # Unbind command
     unbind_parser = subparsers.add_parser("unbind", help="Remove a USB device binding")
-    unbind_parser.add_argument(
+    unbind_group = unbind_parser.add_mutually_exclusive_group(required=True)
+    unbind_group.add_argument(
         "--bus-id",
-        required=True,
-        help="Bus ID of the device to unbind (format: bus-port, e.g., 1-3)",
+        help="Bus ID of the device to unbind (format: bus-port.port..., e.g., 1-4.3)",
+    )
+    unbind_group.add_argument(
+        "--all",
+        action="store_true",
+        dest="unbind_all",
+        help="Remove all device bindings",
     )
 
     # Start command
@@ -280,7 +300,7 @@ def main() -> None:
     elif args.command == "bind":
         command_bind(args.bus_id)
     elif args.command == "unbind":
-        command_unbind(args.bus_id)
+        command_unbind(bus_id=args.bus_id, unbind_all=args.unbind_all)
     elif args.command == "start":
         command_start()
     else:
