@@ -144,7 +144,9 @@ class USBIPServer:
             self._server_socket = None
         logger.info("USB/IP server stopped")
 
-    def _handle_client(self, client_socket: socket.socket, client_address: tuple) -> None:
+    def _handle_client(
+        self, client_socket: socket.socket, client_address: tuple
+    ) -> None:
         """
         Handle a client connection.
 
@@ -451,7 +453,9 @@ class USBIPServer:
 
         # Try to detach kernel driver and claim interfaces
         if not self._prepare_device_for_use(device):
-            logger.error(f"Cannot handle URB traffic for {bus_id} - device preparation failed")
+            logger.error(
+                f"Cannot handle URB traffic for {bus_id} - device preparation failed"
+            )
             return
 
         logger.info(f"Starting URB traffic handling for {bus_id}")
@@ -524,7 +528,9 @@ class USBIPServer:
                 try:
                     if device.is_kernel_driver_active(interface_number):
                         device.detach_kernel_driver(interface_number)
-                        logger.debug(f"Detached kernel driver from interface {interface_number}")
+                        logger.debug(
+                            f"Detached kernel driver from interface {interface_number}"
+                        )
                 except (usb.core.USBError, NotImplementedError):
                     # Not all platforms support this
                     pass
@@ -537,7 +543,9 @@ class USBIPServer:
                         access_denied = True
                         logger.debug(f"Access denied for interface {interface_number}")
                     else:
-                        logger.warning(f"Could not claim interface {interface_number}: {error}")
+                        logger.warning(
+                            f"Could not claim interface {interface_number}: {error}"
+                        )
 
         except usb.core.USBError as error:
             if error.errno == 13:
@@ -594,12 +602,16 @@ class USBIPServer:
                 is_device_to_host = (bmRequestType & 0x80) != 0
                 if not is_device_to_host:
                     # Host to Device (OUT) - read the data
-                    transfer_buffer = self._recv_exact(client_socket, transfer_buffer_length)
+                    transfer_buffer = self._recv_exact(
+                        client_socket, transfer_buffer_length
+                    )
                     if transfer_buffer is None:
                         return
             elif direction == USBIP_DIR_OUT:
                 # Bulk/Interrupt OUT - read the data
-                transfer_buffer = self._recv_exact(client_socket, transfer_buffer_length)
+                transfer_buffer = self._recv_exact(
+                    client_socket, transfer_buffer_length
+                )
                 if transfer_buffer is None:
                     return
 
@@ -659,7 +671,9 @@ class USBIPServer:
             response += response_data[:actual_length]
 
         client_socket.sendall(response)
-        logger.debug(f"Sent URB response: seqnum={seqnum}, status={status}, actual_length={actual_length}")
+        logger.debug(
+            f"Sent URB response: seqnum={seqnum}, status={status}, actual_length={actual_length}"
+        )
 
     def _do_control_transfer(
         self,
@@ -708,7 +722,12 @@ class USBIPServer:
                 # Host to Device (OUT) - write data to device
                 if wLength > 0 and data:
                     result = device.ctrl_transfer(
-                        bmRequestType, bRequest, wValue, wIndex, data[:wLength], timeout=5000
+                        bmRequestType,
+                        bRequest,
+                        wValue,
+                        wIndex,
+                        data[:wLength],
+                        timeout=5000,
                     )
                 else:
                     result = device.ctrl_transfer(
@@ -743,7 +762,9 @@ class USBIPServer:
         # Construct the full endpoint address with direction bit
         if direction == USBIP_DIR_IN:
             endpoint_addr = (endpoint & 0x0F) | 0x80  # Set IN bit (bit 7)
-            logger.debug(f"Bulk/Interrupt IN transfer: endpoint=0x{endpoint_addr:02x}, length={length}")
+            logger.debug(
+                f"Bulk/Interrupt IN transfer: endpoint=0x{endpoint_addr:02x}, length={length}"
+            )
             try:
                 # Use a shorter timeout for interrupt endpoints to avoid blocking
                 result = device.read(endpoint_addr, length, timeout=1000)
@@ -754,7 +775,9 @@ class USBIPServer:
                 raise
         else:
             endpoint_addr = endpoint & 0x0F  # Clear direction bit for OUT
-            logger.debug(f"Bulk/Interrupt OUT transfer: endpoint=0x{endpoint_addr:02x}, length={len(data)}")
+            logger.debug(
+                f"Bulk/Interrupt OUT transfer: endpoint=0x{endpoint_addr:02x}, length={len(data)}"
+            )
             result = device.write(endpoint_addr, data, timeout=5000)
             return b"", result
 

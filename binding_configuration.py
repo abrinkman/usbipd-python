@@ -156,7 +156,10 @@ class BindingConfiguration:
         if bindings is None:
             return []
 
-        return [self._device_element_to_dict(device) for device in bindings.findall("device")]
+        return [
+            self._device_element_to_dict(device)
+            for device in bindings.findall("device")
+        ]
 
     def is_bound(self, bus_id: str) -> bool:
         """

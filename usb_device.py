@@ -42,7 +42,9 @@ class USBDevice:
             target_bus = int(bus)
             target_port = int(port)
         except ValueError as error:
-            raise ValueError(f"Invalid bus ID format '{bus_id}'. Expected format: bus-port (e.g., 1-3)") from error
+            raise ValueError(
+                f"Invalid bus ID format '{bus_id}'. Expected format: bus-port (e.g., 1-3)"
+            ) from error
 
         devices = usb.core.find(find_all=True)
         for device in devices:
@@ -81,7 +83,9 @@ class USBDevice:
 
         try:
             if device.iManufacturer:
-                result["manufacturer"] = usb.util.get_string(device, device.iManufacturer)
+                result["manufacturer"] = usb.util.get_string(
+                    device, device.iManufacturer
+                )
         except (usb.core.USBError, ValueError):
             pass
 
@@ -93,7 +97,9 @@ class USBDevice:
 
         try:
             if device.iSerialNumber:
-                result["serial_number"] = usb.util.get_string(device, device.iSerialNumber)
+                result["serial_number"] = usb.util.get_string(
+                    device, device.iSerialNumber
+                )
         except (usb.core.USBError, ValueError):
             pass
 
@@ -115,7 +121,9 @@ class USBDevice:
         # Basic device information
         lines.append(f"Vendor ID:      0x{device.idVendor:04x}")
         lines.append(f"Product ID:     0x{device.idProduct:04x}")
-        lines.append(f"USB Version:    {device.bcdUSB >> 8}.{(device.bcdUSB >> 4) & 0xf}{device.bcdUSB & 0xf}")
+        lines.append(
+            f"USB Version:    {device.bcdUSB >> 8}.{(device.bcdUSB >> 4) & 0xF}{device.bcdUSB & 0xF}"
+        )
         lines.append(f"Device Class:   {device.bDeviceClass}")
         lines.append(f"Device Subclass:{device.bDeviceSubClass}")
         lines.append(f"Device Protocol:{device.bDeviceProtocol}")
@@ -164,31 +172,48 @@ class USBDevice:
 
             # Interface information
             for interface in config:
-                lines.append(f"\n    Interface {interface.bInterfaceNumber}, Alt Setting {interface.bAlternateSetting}:")
+                lines.append(
+                    f"\n    Interface {interface.bInterfaceNumber}, Alt Setting {interface.bAlternateSetting}:"
+                )
                 lines.append(f"      Interface Class:    {interface.bInterfaceClass}")
-                lines.append(f"      Interface Subclass: {interface.bInterfaceSubClass}")
-                lines.append(f"      Interface Protocol: {interface.bInterfaceProtocol}")
+                lines.append(
+                    f"      Interface Subclass: {interface.bInterfaceSubClass}"
+                )
+                lines.append(
+                    f"      Interface Protocol: {interface.bInterfaceProtocol}"
+                )
                 lines.append(f"      Num Endpoints:      {interface.bNumEndpoints}")
 
                 try:
                     if interface.iInterface:
-                        interface_string = usb.util.get_string(device, interface.iInterface)
+                        interface_string = usb.util.get_string(
+                            device, interface.iInterface
+                        )
                         lines.append(f"      Description:        {interface_string}")
                 except (usb.core.USBError, ValueError):
                     pass
 
                 # Endpoint information
                 for endpoint in interface:
-                    endpoint_direction = "IN" if usb.util.endpoint_direction(endpoint.bEndpointAddress) == usb.util.ENDPOINT_IN else "OUT"
+                    endpoint_direction = (
+                        "IN"
+                        if usb.util.endpoint_direction(endpoint.bEndpointAddress)
+                        == usb.util.ENDPOINT_IN
+                        else "OUT"
+                    )
                     endpoint_type_map = {
                         usb.util.ENDPOINT_TYPE_CTRL: "Control",
                         usb.util.ENDPOINT_TYPE_ISO: "Isochronous",
                         usb.util.ENDPOINT_TYPE_BULK: "Bulk",
                         usb.util.ENDPOINT_TYPE_INTR: "Interrupt",
                     }
-                    endpoint_type = endpoint_type_map.get(usb.util.endpoint_type(endpoint.bmAttributes), "Unknown")
+                    endpoint_type = endpoint_type_map.get(
+                        usb.util.endpoint_type(endpoint.bmAttributes), "Unknown"
+                    )
 
-                    lines.append(f"\n        Endpoint 0x{endpoint.bEndpointAddress:02x}:")
+                    lines.append(
+                        f"\n        Endpoint 0x{endpoint.bEndpointAddress:02x}:"
+                    )
                     lines.append(f"          Direction:      {endpoint_direction}")
                     lines.append(f"          Type:           {endpoint_type}")
                     lines.append(f"          Max Packet:     {endpoint.wMaxPacketSize}")

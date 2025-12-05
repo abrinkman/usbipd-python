@@ -43,21 +43,37 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
         A dictionary containing device information.
     """
     try:
-        manufacturer = usb.util.get_string(device, device.iManufacturer) if device.iManufacturer else "Unknown"
+        manufacturer = (
+            usb.util.get_string(device, device.iManufacturer)
+            if device.iManufacturer
+            else "Unknown"
+        )
     except (usb.core.USBError, ValueError):
         manufacturer = "Unknown"
 
     try:
-        product = usb.util.get_string(device, device.iProduct) if device.iProduct else "Unknown"
+        product = (
+            usb.util.get_string(device, device.iProduct)
+            if device.iProduct
+            else "Unknown"
+        )
     except (usb.core.USBError, ValueError):
         product = "Unknown"
 
     try:
-        serial_number = usb.util.get_string(device, device.iSerialNumber) if device.iSerialNumber else "N/A"
+        serial_number = (
+            usb.util.get_string(device, device.iSerialNumber)
+            if device.iSerialNumber
+            else "N/A"
+        )
     except (usb.core.USBError, ValueError):
         serial_number = "N/A"
 
-    bus_id = f"{device.bus}-{device.port_number}" if device.port_number else f"{device.bus}-0"
+    bus_id = (
+        f"{device.bus}-{device.port_number}"
+        if device.port_number
+        else f"{device.bus}-0"
+    )
 
     return {
         "bus_id": bus_id,
@@ -97,7 +113,9 @@ def print_usb_devices(devices: list[dict]) -> None:
         print("No USB devices found.")
         return
 
-    print(f"{'Bus-Port':<10} {'VID:PID':<12} {'Manufacturer':<25} {'Product':<30} {'Serial':<20}")
+    print(
+        f"{'Bus-Port':<10} {'VID:PID':<12} {'Manufacturer':<25} {'Product':<30} {'Serial':<20}"
+    )
     print("-" * 100)
 
     for device in devices:
@@ -136,7 +154,7 @@ def command_bind(bus_id: str) -> None:
         added = config.add_binding(
             bus_id=device_info["bus_id"],
             vendor_id=device_info["vendor_id"],
-            product_id=device_info["product_id"]
+            product_id=device_info["product_id"],
         )
 
         if added:
@@ -151,6 +169,7 @@ def command_bind(bus_id: str) -> None:
         print(f"Error: {error}", file=sys.stderr)
         sys.exit(1)
 
+
 def command_start() -> None:
     """Handle the 'start' command to start the USBIP server."""
     server = USBIPServer()
@@ -160,7 +179,9 @@ def command_start() -> None:
     bindings = config.get_all_bindings()
 
     if not bindings:
-        print("No devices are bound. Use 'usbipd bind --bus-id <bus-id>' to bind devices first.")
+        print(
+            "No devices are bound. Use 'usbipd bind --bus-id <bus-id>' to bind devices first."
+        )
         sys.exit(1)
 
     exported_count = 0
@@ -172,10 +193,14 @@ def command_start() -> None:
             print(f"Exported device: {bus_id}")
             exported_count += 1
         except (ValueError, LookupError) as error:
-            print(f"Warning: Could not export device {bus_id}: {error}", file=sys.stderr)
+            print(
+                f"Warning: Could not export device {bus_id}: {error}", file=sys.stderr
+            )
 
     if exported_count == 0:
-        print("No devices could be exported. Check that bound devices are still connected.")
+        print(
+            "No devices could be exported. Check that bound devices are still connected."
+        )
         sys.exit(1)
 
     try:
@@ -188,6 +213,7 @@ def command_start() -> None:
         print(f"Failed to start USBIP server: {error}", file=sys.stderr)
         sys.exit(1)
 
+
 def main() -> None:
     """Main entry point for usbipd."""
     parser = argparse.ArgumentParser(
@@ -196,7 +222,8 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose (debug) logging",
     )
