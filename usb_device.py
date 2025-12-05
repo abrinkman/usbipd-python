@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-License-Identifier: GPL-3.0-or-later
 """USB device wrapper module for usbipd."""
 
 import usb.core

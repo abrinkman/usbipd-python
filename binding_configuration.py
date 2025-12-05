@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Configuration manager for usbipd bound devices."""
 
 import os

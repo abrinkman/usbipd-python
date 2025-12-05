@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 usbipd - USB over IP daemon utility for macOS.
 """
