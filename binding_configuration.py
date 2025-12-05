@@ -65,14 +65,18 @@ class BindingConfiguration:
         tree = ET.parse(self.config_path)
         return tree.getroot()
 
-    def add_binding(self, bus_id: str, vendor_id: str, product_id: str) -> bool:
+    def add_binding(
+        self, vendor_id: str, product_id: str, serial_number: str = ""
+    ) -> bool:
         """
         Add a device binding to the configuration.
 
+        Devices are identified by VID:PID and optionally serial number.
+
         Args:
-            bus_id: The bus ID of the device (e.g., '1-3').
             vendor_id: The vendor ID in hex format (e.g., '1234').
             product_id: The product ID in hex format (e.g., '5678').
+            serial_number: The device serial number (optional, may be empty).
 
         Returns:
             True if the binding was added, False if it already exists.
@@ -83,26 +87,35 @@ class BindingConfiguration:
         if bindings is None:
             bindings = ET.SubElement(root, "bindings")
 
-        # Check if binding already exists
+        # Check if binding already exists (same VID:PID:serial)
         for device in bindings.findall("device"):
-            if device.get("bus_id") == bus_id:
+            if (
+                device.get("vendor_id") == vendor_id
+                and device.get("product_id") == product_id
+                and device.get("serial_number", "") == serial_number
+            ):
                 return False
 
         # Add new binding
         device_element = ET.SubElement(bindings, "device")
-        device_element.set("bus_id", bus_id)
         device_element.set("vendor_id", vendor_id)
         device_element.set("product_id", product_id)
+        if serial_number:
+            device_element.set("serial_number", serial_number)
 
         self._write_config(root)
         return True
 
-    def remove_binding(self, bus_id: str) -> bool:
+    def remove_binding(
+        self, vendor_id: str, product_id: str, serial_number: str = ""
+    ) -> bool:
         """
         Remove a device binding from the configuration.
 
         Args:
-            bus_id: The bus ID of the device to remove.
+            vendor_id: The vendor ID in hex format.
+            product_id: The product ID in hex format.
+            serial_number: The device serial number (optional).
 
         Returns:
             True if the binding was removed, False if it was not found.
@@ -114,19 +127,27 @@ class BindingConfiguration:
             return False
 
         for device in bindings.findall("device"):
-            if device.get("bus_id") == bus_id:
+            if (
+                device.get("vendor_id") == vendor_id
+                and device.get("product_id") == product_id
+                and device.get("serial_number", "") == serial_number
+            ):
                 bindings.remove(device)
                 self._write_config(root)
                 return True
 
         return False
 
-    def get_binding(self, bus_id: str) -> dict | None:
+    def get_binding(
+        self, vendor_id: str, product_id: str, serial_number: str = ""
+    ) -> dict | None:
         """
-        Get a specific binding by bus ID.
+        Get a specific binding by VID:PID:serial.
 
         Args:
-            bus_id: The bus ID to look up.
+            vendor_id: The vendor ID in hex format.
+            product_id: The product ID in hex format.
+            serial_number: The device serial number (optional).
 
         Returns:
             A dictionary with the binding information, or None if not found.
@@ -138,7 +159,11 @@ class BindingConfiguration:
             return None
 
         for device in bindings.findall("device"):
-            if device.get("bus_id") == bus_id:
+            if (
+                device.get("vendor_id") == vendor_id
+                and device.get("product_id") == product_id
+                and device.get("serial_number", "") == serial_number
+            ):
                 return self._device_element_to_dict(device)
 
         return None
@@ -161,17 +186,21 @@ class BindingConfiguration:
             for device in bindings.findall("device")
         ]
 
-    def is_bound(self, bus_id: str) -> bool:
+    def is_bound(
+        self, vendor_id: str, product_id: str, serial_number: str = ""
+    ) -> bool:
         """
         Check if a device is bound.
 
         Args:
-            bus_id: The bus ID to check.
+            vendor_id: The vendor ID in hex format.
+            product_id: The product ID in hex format.
+            serial_number: The device serial number (optional).
 
         Returns:
             True if the device is bound, False otherwise.
         """
-        return self.get_binding(bus_id) is not None
+        return self.get_binding(vendor_id, product_id, serial_number) is not None
 
     def clear_all_bindings(self) -> int:
         """
@@ -201,10 +230,8 @@ class BindingConfiguration:
         Returns:
             A dictionary containing the device information.
         """
-        result = {
-            "bus_id": device.get("bus_id", ""),
+        return {
             "vendor_id": device.get("vendor_id", ""),
             "product_id": device.get("product_id", ""),
+            "serial_number": device.get("serial_number", ""),
         }
-
-        return result
