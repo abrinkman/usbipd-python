@@ -9,6 +9,7 @@ import argparse
 import logging
 import sys
 
+import usb.backend.libusb1 as libusb1
 import usb.core
 import usb.util
 
@@ -90,10 +91,16 @@ def list_usb_devices() -> list[dict]:
     """
     Find and list all connected USB devices.
 
+    Uses a fresh libusb backend to ensure devices that went idle
+    are properly re-enumerated.
+
     Returns:
         A list of dictionaries containing information about each USB device.
     """
-    devices = usb.core.find(find_all=True)
+    # Create a fresh backend to force re-enumeration of USB devices
+    # This fixes issues where idle devices are not listed
+    backend = libusb1.get_backend()
+    devices = usb.core.find(find_all=True, backend=backend)
     device_list = []
 
     for device in devices:
