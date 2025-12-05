@@ -33,6 +33,24 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
+def _clean_usb_string(value: str) -> str:
+    """
+    Clean a USB string by removing null characters and everything after.
+
+    Some USB devices return strings with embedded null characters and garbage
+    data. This function truncates at the first null character.
+
+    Args:
+        value: The raw USB string.
+
+    Returns:
+        The cleaned string, truncated at the first null character.
+    """
+    if "\x00" in value:
+        return value.split("\x00")[0]
+    return value
+
+
 def get_usb_device_info(device: usb.core.Device) -> dict:
     """
     Extract relevant information from a USB device.
@@ -45,7 +63,7 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
     """
     try:
         manufacturer = (
-            usb.util.get_string(device, device.iManufacturer)
+            _clean_usb_string(usb.util.get_string(device, device.iManufacturer))
             if device.iManufacturer
             else "Unknown"
         )
@@ -54,7 +72,7 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
 
     try:
         product = (
-            usb.util.get_string(device, device.iProduct)
+            _clean_usb_string(usb.util.get_string(device, device.iProduct))
             if device.iProduct
             else "Unknown"
         )
@@ -63,7 +81,7 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
 
     try:
         serial_number = (
-            usb.util.get_string(device, device.iSerialNumber)
+            _clean_usb_string(usb.util.get_string(device, device.iSerialNumber))
             if device.iSerialNumber
             else "N/A"
         )
@@ -110,39 +128,48 @@ def list_usb_devices() -> list[dict]:
     return device_list
 
 
-def print_usb_devices(devices: list[dict]) -> None:
+def print_usb_devices(devices: list[dict], config: BindingConfiguration) -> None:
     """
     Print USB device information in a formatted table.
 
     Args:
         devices: A list of device information dictionaries.
+        config: The binding configuration to check device state.
     """
     if not devices:
         print("No USB devices found.")
         return
 
     print(
-        f"{'Bus-Port':<10} {'VID:PID':<12} {'Manufacturer':<25} {'Product':<30} {'Serial':<20}"
+        f"{'BUSID':<14} {'VID:PID':<12} {'Manufacturer':<20} {'Product':<26} "
+        f"{'Serial':<20} {'State':<10}"
     )
-    print("-" * 100)
+    print("-" * 105)
 
     for device in devices:
         vid_pid = f"{device['vendor_id']}:{device['product_id']}"
+        state = "Bound" if config.is_bound(device["bus_id"]) else "Not bound"
+        bus_id = device["bus_id"][:14]
+        manufacturer = device["manufacturer"][:20]
+        product = device["product"][:26]
+        serial = device["serial_number"][:20]
         print(
-            f"{device['bus_id']:<10} "
+            f"{bus_id:<14} "
             f"{vid_pid:<12} "
-            f"{device['manufacturer'][:24]:<25} "
-            f"{device['product'][:29]:<30} "
-            f"{device['serial_number'][:19]:<20}"
+            f"{manufacturer:<20} "
+            f"{product:<26} "
+            f"{serial:<20} "
+            f"{state:<10}"
         )
 
 
 def command_list() -> None:
     """Handle the 'list' command to display all connected USB devices."""
     print("USB Device List")
-    print("=" * 100)
+    print("=" * 110)
+    config = BindingConfiguration()
     devices = list_usb_devices()
-    print_usb_devices(devices)
+    print_usb_devices(devices, config)
     print(f"\nTotal devices found: {len(devices)}")
 
 
@@ -275,6 +302,7 @@ def main() -> None:
     # Bind command
     bind_parser = subparsers.add_parser("bind", help="Bind a USB device for sharing")
     bind_parser.add_argument(
+        "-b",
         "--bus-id",
         required=True,
         help="Bus ID of the device to bind (format: bus-port, e.g., 1-3)",
@@ -284,6 +312,7 @@ def main() -> None:
     unbind_parser = subparsers.add_parser("unbind", help="Remove a USB device binding")
     unbind_group = unbind_parser.add_mutually_exclusive_group(required=True)
     unbind_group.add_argument(
+        "-b",
         "--bus-id",
         help="Bus ID of the device to unbind (format: bus-port.port..., e.g., 1-4.3)",
     )
