@@ -9,7 +9,24 @@ A USB/IP server written in Python for sharing USB devices over the network, base
 Note: this is a very early proof-of-concept implementation, which was mainly built for learning purposes with
 Copilot assistance. It seems to work, more or less, for simple USB devices like a joystick, but more complex devices may not work correctly. Use at your own risk.
 
-## Instructions for running
+## Preparing the environment
+
+Make sure you have a Python environment present, with the required packages present. Or create a venv:
+
+1. Create venv:
+   ```bash
+   python3 -m venv .venv
+   ```
+2. Load the venv:
+   ```bash
+   source .venv/bin/activate
+   ```
+3. Install requirements:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Running the application
 
 1. List USB devices:
    ```bash
