@@ -610,9 +610,7 @@ class USBIPServer:
                     transfer_buffer = recv_result
             elif direction == USBIP_DIR_OUT:
                 # Bulk/Interrupt OUT - read the data
-                recv_result = self._recv_exact(
-                    client_socket, transfer_buffer_length
-                )
+                recv_result = self._recv_exact(client_socket, transfer_buffer_length)
                 if recv_result is None:
                     return
                 transfer_buffer = recv_result
