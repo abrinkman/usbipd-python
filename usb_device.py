@@ -1,10 +1,11 @@
-# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-FileCopyrightText: 2025 abrinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
 """USB device wrapper module for usbipd."""
 
-import usb.backend.libusb1 as libusb1
 import usb.core
 import usb.util
+
+from libusb_backend import get_backend
 
 
 class USBDevice:
@@ -52,7 +53,7 @@ class USBDevice:
             ) from error
 
         # Create a fresh backend to force re-enumeration of USB devices
-        backend = libusb1.get_backend()
+        backend = get_backend()
         devices = usb.core.find(find_all=True, backend=backend)
         for device in devices:
             device_port_numbers = device.port_numbers if device.port_numbers else (0,)
