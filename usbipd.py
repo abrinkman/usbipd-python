@@ -69,11 +69,12 @@ def get_usb_device_info(device: usb.core.Device) -> dict:
     except (usb.core.USBError, ValueError):
         serial_number = "N/A"
 
-    bus_id = (
-        f"{device.bus}-{device.port_number}"
-        if device.port_number
-        else f"{device.bus}-0"
-    )
+    # Use full port path for unique bus ID (e.g., 1-4.3 for bus 1, port 4, port 3)
+    if device.port_numbers:
+        port_path = ".".join(str(p) for p in device.port_numbers)
+        bus_id = f"{device.bus}-{port_path}"
+    else:
+        bus_id = f"{device.bus}-0"
 
     return {
         "bus_id": bus_id,
@@ -170,6 +171,23 @@ def command_bind(bus_id: str) -> None:
         sys.exit(1)
 
 
+def command_unbind(bus_id: str) -> None:
+    """
+    Handle the 'unbind' command to remove a USB device binding.
+
+    Args:
+        bus_id: The bus ID of the device to unbind (format: bus-port, e.g., 1-3).
+    """
+    config = BindingConfiguration()
+    removed = config.remove_binding(bus_id)
+
+    if removed:
+        print(f"Device unbound successfully: {bus_id}")
+    else:
+        print(f"Device is not bound: {bus_id}")
+        sys.exit(1)
+
+
 def command_start() -> None:
     """Handle the 'start' command to start the USBIP server."""
     server = USBIPServer()
@@ -241,6 +259,14 @@ def main() -> None:
         help="Bus ID of the device to bind (format: bus-port, e.g., 1-3)",
     )
 
+    # Unbind command
+    unbind_parser = subparsers.add_parser("unbind", help="Remove a USB device binding")
+    unbind_parser.add_argument(
+        "--bus-id",
+        required=True,
+        help="Bus ID of the device to unbind (format: bus-port, e.g., 1-3)",
+    )
+
     # Start command
     subparsers.add_parser("start", help="Start the USBIP server with bound devices")
 
@@ -253,6 +279,8 @@ def main() -> None:
         command_list()
     elif args.command == "bind":
         command_bind(args.bus_id)
+    elif args.command == "unbind":
+        command_unbind(args.bus_id)
     elif args.command == "start":
         command_start()
     else:

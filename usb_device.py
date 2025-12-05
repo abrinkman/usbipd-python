@@ -14,7 +14,7 @@ class USBDevice:
         Initialize a USBDevice instance.
 
         Args:
-            bus_id: The bus ID in format 'bus-port' (e.g., '1-3').
+            bus_id: The bus ID in format 'bus-port.port...' (e.g., '1-4.3').
 
         Raises:
             ValueError: If the bus ID format is invalid.
@@ -28,7 +28,7 @@ class USBDevice:
         Find a USB device by its bus ID.
 
         Args:
-            bus_id: The bus ID in format 'bus-port' (e.g., '1-3').
+            bus_id: The bus ID in format 'bus-port.port...' (e.g., '1-4.3').
 
         Returns:
             The USB device if found.
@@ -38,18 +38,19 @@ class USBDevice:
             LookupError: If no device is found at the specified bus ID.
         """
         try:
-            bus, port = bus_id.split("-")
-            target_bus = int(bus)
-            target_port = int(port)
+            bus_str, port_path = bus_id.split("-", 1)
+            target_bus = int(bus_str)
+            target_port_numbers = tuple(int(p) for p in port_path.split("."))
         except ValueError as error:
             raise ValueError(
-                f"Invalid bus ID format '{bus_id}'. Expected format: bus-port (e.g., 1-3)"
+                f"Invalid bus ID format '{bus_id}'. "
+                "Expected format: bus-port.port... (e.g., 1-4.3)"
             ) from error
 
         devices = usb.core.find(find_all=True)
         for device in devices:
-            device_port = device.port_number if device.port_number else 0
-            if device.bus == target_bus and device_port == target_port:
+            device_port_numbers = device.port_numbers if device.port_numbers else (0,)
+            if device.bus == target_bus and device_port_numbers == target_port_numbers:
                 return device
 
         raise LookupError(f"No device found with bus ID '{bus_id}'")
