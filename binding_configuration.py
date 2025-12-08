@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-FileCopyrightText: 2025 Alexander Brinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Configuration manager for usbipd bound devices."""
 

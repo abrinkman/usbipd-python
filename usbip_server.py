@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-FileCopyrightText: 2025 Alexander Brinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
 """USB/IP server implementation for sharing USB devices over the network."""
 

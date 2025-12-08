@@ -11,7 +11,9 @@
 - `usb_device.py`: `USBDevice` class wrapping `pyusb` device access.
 - `usbip_server.py`: `USBIPServer` class implementing the USB/IP protocol.
 - `binding_configuration.py`: `BindingConfiguration` class for XML-based device binding storage.
+- `libusb_backend.py`: Cross-platform libusb backend loader for pyusb.
 - `requirements.txt`: Python package dependencies.
+- `requirements-dev.txt`: Development dependencies (ruff, mypy).
 
 ## Coding Standards
 
@@ -22,8 +24,9 @@
 - Use descriptive, meaningful names. Avoid single-letter variables except for loop counters.
 
 ### Code Quality
-- Target Python 3.10+ features and syntax.
+- Target Python 3.9+ compatibility (use `Optional[T]` from typing, not `T | None`).
 - Use type hints for all function signatures and return types.
+- Use `from typing import Optional` for optional types (Python 3.9 compatibility).
 - Write modular, reusable code with clear separation of concerns.
 - Handle errors gracefully with appropriate error messages to stderr.
 - Use `argparse` for command-line argument parsing.
@@ -62,6 +65,18 @@
 - All protocol fields are big-endian (network byte order)
 - Key operations: OP_REQ_DEVLIST, OP_REP_DEVLIST, OP_REQ_IMPORT, OP_REP_IMPORT
 - URB commands: USBIP_CMD_SUBMIT, USBIP_CMD_UNLINK, USBIP_RET_SUBMIT, USBIP_RET_UNLINK
+
+## Device Binding
+- Users specify devices by bus ID (e.g., `20-4.3`) for bind/unbind commands
+- Bindings are stored using VID:PID:serial for persistent identification
+- Devices without serial numbers are matched by VID:PID only
+- When starting the server, devices are matched by VID:PID:serial and resolved to current bus ID
+
+## Libusb Backend
+- Use the `libusb_backend.py` module for cross-platform libusb backend loading
+- Always create a fresh backend for device enumeration to handle idle devices
+- The backend handles bundled libusb libraries on macOS, Windows, and Linux
+- Import with `from libusb_backend import get_backend`
 
 ## Development Workflow
 

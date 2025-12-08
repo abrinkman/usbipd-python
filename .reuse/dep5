@@ -1,24 +1,24 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: usbipd-python
-Upstream-Contact: abrinkman <https://github.com/abrinkman>
+Upstream-Contact: Alexander Brinkman <https://github.com/abrinkman>
 Source: https://github.com/abrinkman/usbipd-python
 
 Files: .gitignore
-Copyright: 2024 abrinkman
+Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
-Files: requirements.txt
-Copyright: 2024 abrinkman
+Files: requirements*.txt
+Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
 Files: README.md
-Copyright: 2024 abrinkman
+Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
 Files: .github/copilot-instructions.md
-Copyright: 2024 abrinkman
+Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
 Files: .github/workflows/*.yml
-Copyright: 2024 abrinkman
+Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
