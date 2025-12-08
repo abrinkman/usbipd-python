@@ -260,13 +260,15 @@ def main() -> None:
     )
 
     # Start command
-    start_parser = subparsers.add_parser("start", help="Start the USBIP server with bound devices")
+    start_parser = subparsers.add_parser(
+        "start", help="Start the USBIP server with bound devices"
+    )
     start_group = start_parser.add_mutually_exclusive_group()
     start_group.add_argument(
         "-4",
         help="Bind to IPv4 only (defaults to dual-stack)",
         dest="ipv4_only",
-        action="store_true"
+        action="store_true",
     )
     start_group.add_argument(
         "--host",
@@ -286,7 +288,7 @@ def main() -> None:
     elif args.command == "unbind":
         command_unbind(bus_id=args.bus_id, unbind_all=args.unbind_all)
     elif args.command == "start":
-        command_start(host=args.host,ipv4_only=args.ipv4_only)
+        command_start(host=args.host, ipv4_only=args.ipv4_only)
     else:
         parser.print_help()
         sys.exit(1)
