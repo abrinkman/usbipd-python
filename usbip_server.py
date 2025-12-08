@@ -53,12 +53,12 @@ logger = logging.getLogger(__name__)
 class USBIPServer:
     """A USB/IP server that exports USB devices over the network."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
-        """
-        Initialize the USB/IP server.
+    def __init__(self, host: str = "::", port: int = DEFAULT_PORT) -> None:
+        """Initialize the USB/IP server.
 
         Args:
-            host: The host address to bind to.
+            host: The host address to bind to. Defaults to '::' which accepts
+                  both IPv4 and IPv6 connections (dual-stack).
             port: The port to listen on (default: 3240).
         """
         self.host = host
@@ -111,13 +111,23 @@ class USBIPServer:
             logger.warning("Server is already running")
             return
 
-        self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Determine socket family based on host address
+        if ":" in self.host:
+            # IPv6 address (includes '::' for dual-stack)
+            self._server_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            # Enable dual-stack: accept both IPv4 and IPv6 connections
+            # IPV6_V6ONLY=0 means IPv4 clients can connect via IPv4-mapped IPv6 addresses
+            self._server_socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        else:
+            # IPv4 address
+            self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind((self.host, self.port))
         self._server_socket.listen(5)
         self._running = True
 
-        logger.info(f"USB/IP server started on {self.host}:{self.port}")
+        logger.info(f"USB/IP server started on [{self.host}]:{self.port}")
 
         while self._running:
             try:

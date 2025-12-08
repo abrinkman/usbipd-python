@@ -155,9 +155,14 @@ def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> No
         sys.exit(1)
 
 
-def command_start() -> None:
+def command_start(host: Optional[str] = None, ipv4_only: bool = False) -> None:
     """Handle the 'start' command to start the USBIP server."""
-    server = USBIPServer()
+    if host is not None:
+        server = USBIPServer(host=host)
+    elif ipv4_only:
+        server = USBIPServer(host="0.0.0.0")
+    else:
+        server = USBIPServer()
     manager = USBDeviceManager()
 
     # Load bound devices from configuration and export them
@@ -255,7 +260,19 @@ def main() -> None:
     )
 
     # Start command
-    subparsers.add_parser("start", help="Start the USBIP server with bound devices")
+    start_parser = subparsers.add_parser("start", help="Start the USBIP server with bound devices")
+    start_group = start_parser.add_mutually_exclusive_group()
+    start_group.add_argument(
+        "-4",
+        help="Bind to IPv4 only (defaults to dual-stack)",
+        dest="ipv4_only",
+        action="store_true"
+    )
+    start_group.add_argument(
+        "--host",
+        help="Bind to specified host address",
+        dest="host",
+    )
 
     args = parser.parse_args()
 
@@ -269,7 +286,7 @@ def main() -> None:
     elif args.command == "unbind":
         command_unbind(bus_id=args.bus_id, unbind_all=args.unbind_all)
     elif args.command == "start":
-        command_start()
+        command_start(host=args.host,ipv4_only=args.ipv4_only)
     else:
         parser.print_help()
         sys.exit(1)
