@@ -265,7 +265,7 @@ class USBDeviceManager:
         """Find a device by its bus ID.
 
         Args:
-            bus_id: The bus ID string (e.g., "20-4.2.1").
+            bus_id: The bus ID string (e.g., "20-4.2.1" or "0-1").
 
         Returns:
             The USBDevice if found, None otherwise.
@@ -282,8 +282,15 @@ class USBDeviceManager:
         for device in devices:
             if device.bus == target_bus:
                 port_numbers = device.port_numbers
-                if port_numbers and tuple(port_numbers) == target_ports:
-                    return USBDevice(device)
+                if port_numbers:
+                    # Device has port numbers - match against port path
+                    if tuple(port_numbers) == target_ports:
+                        return USBDevice(device)
+                else:
+                    # Device has no port numbers - match against address
+                    # This handles the fallback case in build_bus_id
+                    if len(target_ports) == 1 and device.address == target_ports[0]:
+                        return USBDevice(device)
 
         return None
 
