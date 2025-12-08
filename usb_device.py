@@ -1,6 +1,15 @@
 # SPDX-FileCopyrightText: 2025 Alexander Brinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""USB device wrapper module for usbipd."""
+"""USB device wrapper and manager module for USB/IP server.
+
+This module provides classes for accessing and managing USB devices:
+- USBDevice: Wrapper class for individual USB device access
+- USBDeviceManager: Manager class for device enumeration and lookup
+"""
+
+import logging
+import re
+from typing import Dict, List, Optional, Tuple
 
 import usb.core
 import usb.util
@@ -9,225 +18,329 @@ from libusb_backend import get_backend
 
 
 class USBDevice:
-    """Represents a USB device identified by its bus ID."""
+    """Wrapper class for USB device access via pyusb.
 
-    def __init__(self, bus_id: str) -> None:
-        """
-        Initialize a USBDevice instance.
+    Provides convenient access to USB device properties and descriptors.
 
-        Args:
-            bus_id: The bus ID in format 'bus-port.port...' (e.g., '1-4.3').
+    Attributes:
+        device: The underlying pyusb device object.
+        bus_id: The bus identifier string (e.g., "20-4.2.1").
+    """
 
-        Raises:
-            ValueError: If the bus ID format is invalid.
-            DeviceNotFoundError: If no device is found at the specified bus ID.
-        """
-        self.bus_id = bus_id
-        self._device = self._find_device_by_bus_id(bus_id)
-
-    def _find_device_by_bus_id(self, bus_id: str) -> usb.core.Device:
-        """
-        Find a USB device by its bus ID.
-
-        Uses a fresh libusb backend to ensure devices that went idle
-        are properly re-enumerated.
+    def __init__(self, device: usb.core.Device) -> None:
+        """Initialize USBDevice with a pyusb device.
 
         Args:
-            bus_id: The bus ID in format 'bus-port.port...' (e.g., '1-4.3').
+            device: A pyusb Device object.
+        """
+        self.device = device
+        self.bus_id = self.build_bus_id(device)
+        self._manufacturer: Optional[str] = None
+        self._product: Optional[str] = None
+        self._serial_number: Optional[str] = None
+        self._strings_loaded = False
+
+    @staticmethod
+    def clean_usb_string(value: Optional[str]) -> Optional[str]:
+        """Clean a USB string by removing null characters and whitespace.
+
+        USB strings sometimes contain garbage data after null terminators.
+        This method extracts only the valid portion of the string.
+
+        Args:
+            value: The USB string to clean, or None.
 
         Returns:
-            The USB device if found.
+            The cleaned string, or None if input was None or empty.
+        """
+        if value is None:
+            return None
+        # Split at null character and take first part, then strip whitespace
+        cleaned = value.split("\x00")[0].strip()
+        return cleaned if cleaned else None
+
+    @staticmethod
+    def build_bus_id(device: usb.core.Device) -> str:
+        """Build a bus ID string from a pyusb device.
+
+        The bus ID format is "bus-port.port.port" (e.g., "20-4.2.1").
+
+        Args:
+            device: A pyusb Device object.
+
+        Returns:
+            The bus ID string.
+        """
+        port_numbers = device.port_numbers
+        if port_numbers:
+            port_path = ".".join(str(port) for port in port_numbers)
+            return f"{device.bus}-{port_path}"
+        return f"{device.bus}-{device.address}"
+
+    @staticmethod
+    def parse_bus_id(bus_id: str) -> Tuple[int, Tuple[int, ...]]:
+        """Parse a bus ID string into bus number and port numbers.
+
+        Args:
+            bus_id: The bus ID string (e.g., "20-4.2.1").
+
+        Returns:
+            A tuple of (bus_number, port_numbers_tuple).
 
         Raises:
             ValueError: If the bus ID format is invalid.
-            LookupError: If no device is found at the specified bus ID.
         """
+        match = re.match(r"^(\d+)-(.+)$", bus_id)
+        if not match:
+            raise ValueError(f"Invalid bus ID format: {bus_id}")
+
+        bus_number = int(match.group(1))
+        port_path = match.group(2)
+        port_numbers = tuple(int(port) for port in port_path.split("."))
+        return bus_number, port_numbers
+
+    def _load_strings(self) -> None:
+        """Load USB string descriptors from the device.
+
+        This is done lazily to avoid claiming devices unnecessarily.
+        Errors are logged but don't raise exceptions.
+        """
+        if self._strings_loaded:
+            return
+
+        self._strings_loaded = True
+        logger = logging.getLogger(__name__)
+
         try:
-            bus_str, port_path = bus_id.split("-", 1)
-            target_bus = int(bus_str)
-            target_port_numbers = tuple(int(p) for p in port_path.split("."))
-        except ValueError as error:
-            raise ValueError(
-                f"Invalid bus ID format '{bus_id}'. "
-                "Expected format: bus-port.port... (e.g., 1-4.3)"
-            ) from error
+            if self.device.iManufacturer:
+                raw_manufacturer = usb.util.get_string(
+                    self.device, self.device.iManufacturer
+                )
+                self._manufacturer = self.clean_usb_string(raw_manufacturer)
+        except (usb.core.USBError, ValueError) as error:
+            logger.debug("Could not read manufacturer string: %s", error)
 
-        # Create a fresh backend to force re-enumeration of USB devices
-        backend = get_backend()
-        devices = usb.core.find(find_all=True, backend=backend)
-        for device in devices:
-            device_port_numbers = device.port_numbers if device.port_numbers else (0,)
-            if device.bus == target_bus and device_port_numbers == target_port_numbers:
-                return device
+        try:
+            if self.device.iProduct:
+                raw_product = usb.util.get_string(self.device, self.device.iProduct)
+                self._product = self.clean_usb_string(raw_product)
+        except (usb.core.USBError, ValueError) as error:
+            logger.debug("Could not read product string: %s", error)
 
-        raise LookupError(f"No device found with bus ID '{bus_id}'")
+        try:
+            if self.device.iSerialNumber:
+                raw_serial = usb.util.get_string(self.device, self.device.iSerialNumber)
+                self._serial_number = self.clean_usb_string(raw_serial)
+        except (usb.core.USBError, ValueError) as error:
+            logger.debug("Could not read serial number string: %s", error)
 
     @property
-    def device(self) -> usb.core.Device:
-        """
-        Get the underlying pyusb device object.
+    def vendor_id(self) -> int:
+        """Get the vendor ID (VID) of the device."""
+        return self.device.idVendor
+
+    @property
+    def product_id(self) -> int:
+        """Get the product ID (PID) of the device."""
+        return self.device.idProduct
+
+    @property
+    def manufacturer(self) -> Optional[str]:
+        """Get the manufacturer string of the device."""
+        self._load_strings()
+        return self._manufacturer
+
+    @property
+    def product(self) -> Optional[str]:
+        """Get the product string of the device."""
+        self._load_strings()
+        return self._product
+
+    @property
+    def serial_number(self) -> Optional[str]:
+        """Get the serial number string of the device."""
+        self._load_strings()
+        return self._serial_number
+
+    @property
+    def device_id(self) -> str:
+        """Get the device identity string (VID:PID:serial or VID:PID)."""
+        self._load_strings()
+        if self._serial_number:
+            return f"{self.vendor_id:04x}:{self.product_id:04x}:{self._serial_number}"
+        return f"{self.vendor_id:04x}:{self.product_id:04x}"
+
+    def to_dict(self) -> Dict[str, Optional[str]]:
+        """Get basic device information as a dictionary.
 
         Returns:
-            The usb.core.Device instance.
+            Dictionary with bus_id, vid, pid, manufacturer, product, and serial.
         """
-        return self._device
-
-    def get_basic_info(self) -> dict:
-        """
-        Get basic information about the USB device.
-
-        Returns:
-            A dictionary containing vendor_id, product_id, manufacturer, product, and serial_number.
-        """
-        device = self._device
-        result = {
+        return {
             "bus_id": self.bus_id,
-            "vendor_id": f"{device.idVendor:04x}",
-            "product_id": f"{device.idProduct:04x}",
-            "manufacturer": "",
-            "product": "",
-            "serial_number": "",
+            "vid": f"{self.vendor_id:04x}",
+            "pid": f"{self.product_id:04x}",
+            "manufacturer": self.manufacturer,
+            "product": self.product,
+            "serial": self.serial_number,
         }
 
-        try:
-            if device.iManufacturer:
-                result["manufacturer"] = usb.util.get_string(
-                    device, device.iManufacturer
-                )
-        except (usb.core.USBError, ValueError):
-            pass
-
-        try:
-            if device.iProduct:
-                result["product"] = usb.util.get_string(device, device.iProduct)
-        except (usb.core.USBError, ValueError):
-            pass
-
-        try:
-            if device.iSerialNumber:
-                result["serial_number"] = usb.util.get_string(
-                    device, device.iSerialNumber
-                )
-        except (usb.core.USBError, ValueError):
-            pass
-
-        return result
-
-    def get_device_information(self) -> str:
-        """
-        Get comprehensive information about the USB device.
+    def get_detailed_info(self) -> str:
+        """Get detailed device information as a formatted string.
 
         Returns:
-            A formatted string containing all device information.
+            Multi-line string with device details including configurations
+            and endpoints.
         """
-        lines = []
-        device = self._device
+        lines = [
+            f"Bus ID: {self.bus_id}",
+            f"Vendor ID: 0x{self.vendor_id:04x}",
+            f"Product ID: 0x{self.product_id:04x}",
+            f"Manufacturer: {self.manufacturer or 'N/A'}",
+            f"Product: {self.product or 'N/A'}",
+            f"Serial Number: {self.serial_number or 'N/A'}",
+            f"Device Class: 0x{self.device.bDeviceClass:02x}",
+            f"Device Subclass: 0x{self.device.bDeviceSubClass:02x}",
+            f"Device Protocol: 0x{self.device.bDeviceProtocol:02x}",
+            f"Max Packet Size: {self.device.bMaxPacketSize0}",
+            f"Number of Configurations: {self.device.bNumConfigurations}",
+        ]
 
-        lines.append(f"Device found at bus ID: {self.bus_id}")
-        lines.append("=" * 60)
+        # Add configuration details
+        for config in self.device:
+            lines.append(f"\nConfiguration {config.bConfigurationValue}:")
+            lines.append(f"  Total Length: {config.wTotalLength}")
+            lines.append(f"  Number of Interfaces: {config.bNumInterfaces}")
 
-        # Basic device information
-        lines.append(f"Vendor ID:      0x{device.idVendor:04x}")
-        lines.append(f"Product ID:     0x{device.idProduct:04x}")
-        lines.append(
-            f"USB Version:    {device.bcdUSB >> 8}.{(device.bcdUSB >> 4) & 0xF}{device.bcdUSB & 0xF}"
-        )
-        lines.append(f"Device Class:   {device.bDeviceClass}")
-        lines.append(f"Device Subclass:{device.bDeviceSubClass}")
-        lines.append(f"Device Protocol:{device.bDeviceProtocol}")
-        lines.append(f"Max Packet Size:{device.bMaxPacketSize0}")
-        lines.append(f"Num Configs:    {device.bNumConfigurations}")
-
-        # Try to get string descriptors
-        try:
-            if device.iManufacturer:
-                manufacturer = usb.util.get_string(device, device.iManufacturer)
-                lines.append(f"Manufacturer:   {manufacturer}")
-        except (usb.core.USBError, ValueError) as error:
-            lines.append(f"Manufacturer:   (unable to read: {error})")
-
-        try:
-            if device.iProduct:
-                product = usb.util.get_string(device, device.iProduct)
-                lines.append(f"Product:        {product}")
-        except (usb.core.USBError, ValueError) as error:
-            lines.append(f"Product:        (unable to read: {error})")
-
-        try:
-            if device.iSerialNumber:
-                serial = usb.util.get_string(device, device.iSerialNumber)
-                lines.append(f"Serial Number:  {serial}")
-        except (usb.core.USBError, ValueError) as error:
-            lines.append(f"Serial Number:  (unable to read: {error})")
-
-        # Configuration information
-        lines.append("\n" + "-" * 60)
-        lines.append("Configurations:")
-
-        for config in device:
-            lines.append(f"\n  Configuration {config.bConfigurationValue}:")
-            lines.append(f"    Total Length:     {config.wTotalLength}")
-            lines.append(f"    Num Interfaces:   {config.bNumInterfaces}")
-            lines.append(f"    Config Value:     {config.bConfigurationValue}")
-            lines.append(f"    Max Power:        {config.bMaxPower * 2} mA")
-
-            try:
-                if config.iConfiguration:
-                    config_string = usb.util.get_string(device, config.iConfiguration)
-                    lines.append(f"    Description:      {config_string}")
-            except (usb.core.USBError, ValueError):
-                pass
-
-            # Interface information
             for interface in config:
                 lines.append(
-                    f"\n    Interface {interface.bInterfaceNumber}, Alt Setting {interface.bAlternateSetting}:"
+                    f"\n  Interface {interface.bInterfaceNumber}, "
+                    f"Alt Setting {interface.bAlternateSetting}:"
                 )
-                lines.append(f"      Interface Class:    {interface.bInterfaceClass}")
-                lines.append(
-                    f"      Interface Subclass: {interface.bInterfaceSubClass}"
-                )
-                lines.append(
-                    f"      Interface Protocol: {interface.bInterfaceProtocol}"
-                )
-                lines.append(f"      Num Endpoints:      {interface.bNumEndpoints}")
+                lines.append(f"    Class: 0x{interface.bInterfaceClass:02x}")
+                lines.append(f"    Subclass: 0x{interface.bInterfaceSubClass:02x}")
+                lines.append(f"    Protocol: 0x{interface.bInterfaceProtocol:02x}")
+                lines.append(f"    Number of Endpoints: {interface.bNumEndpoints}")
 
-                try:
-                    if interface.iInterface:
-                        interface_string = usb.util.get_string(
-                            device, interface.iInterface
-                        )
-                        lines.append(f"      Description:        {interface_string}")
-                except (usb.core.USBError, ValueError):
-                    pass
-
-                # Endpoint information
                 for endpoint in interface:
-                    endpoint_direction = (
-                        "IN"
-                        if usb.util.endpoint_direction(endpoint.bEndpointAddress)
-                        == usb.util.ENDPOINT_IN
-                        else "OUT"
-                    )
-                    endpoint_type_map = {
-                        usb.util.ENDPOINT_TYPE_CTRL: "Control",
-                        usb.util.ENDPOINT_TYPE_ISO: "Isochronous",
-                        usb.util.ENDPOINT_TYPE_BULK: "Bulk",
-                        usb.util.ENDPOINT_TYPE_INTR: "Interrupt",
-                    }
-                    endpoint_type = endpoint_type_map.get(
-                        usb.util.endpoint_type(endpoint.bmAttributes), "Unknown"
-                    )
-
+                    direction = "IN" if endpoint.bEndpointAddress & 0x80 else "OUT"
+                    transfer_type = {
+                        0: "Control",
+                        1: "Isochronous",
+                        2: "Bulk",
+                        3: "Interrupt",
+                    }.get(endpoint.bmAttributes & 0x03, "Unknown")
                     lines.append(
-                        f"\n        Endpoint 0x{endpoint.bEndpointAddress:02x}:"
+                        f"\n    Endpoint 0x{endpoint.bEndpointAddress:02x} "
+                        f"({direction}, {transfer_type}):"
                     )
-                    lines.append(f"          Direction:      {endpoint_direction}")
-                    lines.append(f"          Type:           {endpoint_type}")
-                    lines.append(f"          Max Packet:     {endpoint.wMaxPacketSize}")
-                    lines.append(f"          Interval:       {endpoint.bInterval}")
-
-        lines.append("\n" + "=" * 60)
-        lines.append(f"Device at bus ID '{self.bus_id}' successfully queried.")
+                    lines.append(f"      Max Packet Size: {endpoint.wMaxPacketSize}")
+                    lines.append(f"      Interval: {endpoint.bInterval}")
 
         return "\n".join(lines)
+
+
+class USBDeviceManager:
+    """Manager class for USB device enumeration and lookup.
+
+    Provides methods to list devices, find devices by various criteria,
+    and resolve bindings to current devices.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the USBDeviceManager."""
+        self._logger = logging.getLogger(__name__)
+
+    def list_devices(self) -> List[USBDevice]:
+        """List all available USB devices.
+
+        Returns:
+            List of USBDevice objects for all connected devices.
+        """
+        backend = get_backend(fresh=True)
+        devices = usb.core.find(find_all=True, backend=backend)
+        return [USBDevice(device) for device in devices]
+
+    def find_by_bus_id(self, bus_id: str) -> Optional[USBDevice]:
+        """Find a device by its bus ID.
+
+        Args:
+            bus_id: The bus ID string (e.g., "20-4.2.1").
+
+        Returns:
+            The USBDevice if found, None otherwise.
+        """
+        try:
+            target_bus, target_ports = USBDevice.parse_bus_id(bus_id)
+        except ValueError as error:
+            self._logger.error("Invalid bus ID: %s", error)
+            return None
+
+        backend = get_backend(fresh=True)
+        devices = usb.core.find(find_all=True, backend=backend)
+
+        for device in devices:
+            if device.bus == target_bus:
+                port_numbers = device.port_numbers
+                if port_numbers and tuple(port_numbers) == target_ports:
+                    return USBDevice(device)
+
+        return None
+
+    def find_by_identity(
+        self,
+        vendor_id: int,
+        product_id: int,
+        serial_number: Optional[str] = None,
+    ) -> Optional[USBDevice]:
+        """Find a device by VID, PID, and optionally serial number.
+
+        Args:
+            vendor_id: The vendor ID to match.
+            product_id: The product ID to match.
+            serial_number: The serial number to match (optional).
+
+        Returns:
+            The USBDevice if found, None otherwise.
+        """
+        backend = get_backend(fresh=True)
+        devices = usb.core.find(
+            find_all=True,
+            idVendor=vendor_id,
+            idProduct=product_id,
+            backend=backend,
+        )
+
+        for device in devices:
+            usb_device = USBDevice(device)
+
+            if serial_number is None:
+                # No serial specified, return first match
+                return usb_device
+
+            if usb_device.serial_number == serial_number:
+                return usb_device
+
+        return None
+
+    def find_by_binding(self, binding: Dict[str, str]) -> Optional[USBDevice]:
+        """Find a device that matches a binding configuration.
+
+        The binding dictionary should contain 'vendor_id', 'product_id',
+        and optionally 'serial_number'.
+
+        Args:
+            binding: Dictionary with device identity information.
+
+        Returns:
+            The USBDevice if found, None otherwise.
+        """
+        try:
+            vendor_id = int(binding["vendor_id"], 16)
+            product_id = int(binding["product_id"], 16)
+            serial_number = binding.get("serial_number")
+        except (KeyError, ValueError) as error:
+            self._logger.error("Invalid binding format: %s", error)
+            return None
+
+        return self.find_by_identity(vendor_id, product_id, serial_number)

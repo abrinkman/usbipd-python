@@ -60,12 +60,15 @@ def _get_bundled_libusb_path() -> Optional[str]:
     return None
 
 
-def get_backend() -> Any:
-    """
-    Get a libusb backend for pyusb.
+def get_backend(fresh: bool = False) -> Any:
+    """Get a libusb backend for pyusb.
 
     Uses the bundled libusb library from the 'libusb' package if available,
     otherwise falls back to the system libusb installation.
+
+    Args:
+        fresh: If True, create a new backend instance to force re-enumeration
+               of USB devices. This helps detect devices that went idle.
 
     Returns:
         A libusb backend instance for use with pyusb.
@@ -73,6 +76,11 @@ def get_backend() -> Any:
     Raises:
         RuntimeError: If no libusb backend is available.
     """
+    # Note: The 'fresh' parameter exists for API compatibility with callers
+    # that want to ensure device re-enumeration. Since get_backend already
+    # creates a new backend each time, this is effectively always fresh.
+    _ = fresh  # Unused, but kept for API compatibility
+
     backend = None
 
     # Try to use the bundled libusb library first
