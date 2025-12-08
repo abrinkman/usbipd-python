@@ -1,101 +1,93 @@
 # SPDX-FileCopyrightText: 2025 Alexander Brinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""
-Libusb backend helper module.
+"""Libusb backend helper module.
 
 This module provides a cross-platform way to get a libusb backend for pyusb.
-It uses the bundled libusb library from the 'libusb' package on all platforms.
+It uses the bundled libusb library from the 'libusb' pip package.
 """
 
 import os
 import platform
 import sys
-from typing import Any, Optional
+from typing import Any
 
 import usb.backend.libusb1 as libusb1
 
+# Import libusb to ensure it's installed (it's a required dependency)
+import libusb
 
-def _get_bundled_libusb_path() -> Optional[str]:
-    """
-    Get the path to the bundled libusb library from the 'libusb' package.
+
+def _get_bundled_libusb_path() -> str:
+    """Get the path to the bundled libusb library from the 'libusb' package.
 
     Returns:
-        The path to the libusb library, or None if not found.
+        The path to the libusb library.
+
+    Raises:
+        RuntimeError: If the bundled library cannot be found.
     """
-    try:
-        import libusb
+    platform_dir = os.path.dirname(libusb._platform.__file__)
 
-        platform_dir = os.path.dirname(libusb._platform.__file__)
+    # Determine OS and library name
+    if sys.platform == "win32":
+        os_name = "windows"
+        lib_name = "libusb-1.0.dll"
+    elif sys.platform == "darwin":
+        os_name = "macos"
+        lib_name = "libusb-1.0.dylib"
+    else:
+        os_name = "linux"
+        lib_name = "libusb-1.0.so"
 
-        # Determine OS and architecture
-        if sys.platform == "win32":
-            os_name = "windows"
-            lib_name = "libusb-1.0.dll"
-        elif sys.platform == "darwin":
-            os_name = "macos"
-            lib_name = "libusb-1.0.dylib"
-        else:
-            os_name = "linux"
-            lib_name = "libusb-1.0.so"
+    # Determine architecture
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        arch = "x86_64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "arm64" if sys.platform == "darwin" else "aarch64"
+    elif machine in ("i386", "i686", "x86"):
+        arch = "x86"
+    elif machine.startswith("arm"):
+        arch = "armhf"
+    else:
+        arch = "x86_64"  # Default fallback
 
-        # Determine architecture
-        machine = platform.machine().lower()
-        if machine in ("x86_64", "amd64"):
-            arch = "x86_64"
-        elif machine in ("aarch64", "arm64"):
-            arch = "arm64" if sys.platform == "darwin" else "aarch64"
-        elif machine in ("i386", "i686", "x86"):
-            arch = "x86"
-        elif machine.startswith("arm"):
-            arch = "armhf"
-        else:
-            arch = "x86_64"  # Default fallback
+    lib_path = os.path.join(platform_dir, os_name, arch, lib_name)
+    if not os.path.exists(lib_path):
+        raise RuntimeError(
+            f"Bundled libusb library not found at {lib_path}. "
+            f"Try reinstalling: pip install --force-reinstall libusb"
+        )
 
-        lib_path = os.path.join(platform_dir, os_name, arch, lib_name)
-        if os.path.exists(lib_path):
-            return lib_path
-    except ImportError:
-        pass
-
-    return None
+    return lib_path
 
 
 def get_backend(fresh: bool = False) -> Any:
     """Get a libusb backend for pyusb.
 
-    Uses the bundled libusb library from the 'libusb' package if available,
-    otherwise falls back to the system libusb installation.
+    Uses the bundled libusb library from the 'libusb' pip package.
 
     Args:
-        fresh: If True, create a new backend instance to force re-enumeration
-               of USB devices. This helps detect devices that went idle.
+        fresh: Unused, kept for API compatibility. Each call creates a new
+               backend instance which forces re-enumeration of USB devices.
 
     Returns:
         A libusb backend instance for use with pyusb.
 
     Raises:
-        RuntimeError: If no libusb backend is available.
+        RuntimeError: If the libusb backend cannot be initialized.
     """
-    # Note: The 'fresh' parameter exists for API compatibility with callers
-    # that want to ensure device re-enumeration. Since get_backend already
-    # creates a new backend each time, this is effectively always fresh.
     _ = fresh  # Unused, but kept for API compatibility
 
-    backend = None
-
-    # Try to use the bundled libusb library first
     lib_path = _get_bundled_libusb_path()
-    if lib_path:
-        backend = libusb1.get_backend(find_library=lambda _: lib_path)
-
-    if backend is None:
-        # Fall back to system libusb
-        backend = libusb1.get_backend()
+    backend = libusb1.get_backend(find_library=lambda _: lib_path)
 
     if backend is None:
         raise RuntimeError(
-            "No libusb backend available. "
-            "Install the 'libusb' package: pip install libusb"
+            f"Failed to initialize libusb backend from {lib_path}. "
+            f"Try reinstalling: pip install --force-reinstall libusb"
         )
+
+    return backend
 
     return backend
