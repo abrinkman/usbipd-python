@@ -4,10 +4,13 @@
 [![REUSE Compliant](https://img.shields.io/badge/reuse-compliant-green.svg)](https://reuse.software/)
 [![Lint](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml/badge.svg)](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml)
 
-A USB/IP server written in Python3 for sharing USB devices over the network, based on usbipd concepts. Works on MacOS using the `pyusb` library, but any system that supports `pyusb` should work.
+A USB/IP server written in Python3 for sharing USB devices over the network, based on usbipd concepts. Works on MacOS using the `pyusb` library, but any system that supports `pyusb` and `libusb` should work.
 
 Note: this is a very early proof-of-concept implementation, which was mainly built for learning purposes with
-Copilot assistance. It seems to work, more or less, for simple USB devices like a joystick, but more complex devices may not work correctly. Use at your own risk.
+Copilot assistance. For simple devices it seems to work OK, however for more complex or HID based devices you
+may run into issues. Some will be because of code quality, however other issues are more fundamental. For
+intance, HID devices are handled by the OS kernel drivers on Windows and MacOS and these drivers cannot be
+detached easily without writing OS native code and/or drivers. Contributions are welcome!
 
 ## Preparing the environment
 

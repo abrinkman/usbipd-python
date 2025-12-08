@@ -439,8 +439,7 @@ class USBIPServer:
         return path + bus_id_bytes + device_info
 
     def _handle_urb_traffic(self, client_socket: socket.socket, bus_id: str) -> None:
-        """
-        Handle URB traffic for an imported device.
+        """Handle URB traffic for an imported device.
 
         Args:
             client_socket: The client socket.
@@ -461,40 +460,67 @@ class USBIPServer:
 
         logger.info(f"Starting URB traffic handling for {bus_id}")
 
-        while self._running:
-            try:
-                # Read USBIP header (48 bytes)
-                header = self._recv_exact(client_socket, 48)
-                if not header:
-                    break
+        try:
+            while self._running:
+                try:
+                    # Read USBIP header (48 bytes)
+                    header = self._recv_exact(client_socket, 48)
+                    if not header:
+                        break
 
-                command, seqnum, devid, direction, endpoint = struct.unpack(
-                    ">IIIII", header[:20]
-                )
-
-                if command == USBIP_CMD_SUBMIT:
-                    self._handle_urb_submit(
-                        client_socket, device, header, seqnum, direction, endpoint
+                    command, seqnum, devid, direction, endpoint = struct.unpack(
+                        ">IIIII", header[:20]
                     )
-                elif command == USBIP_CMD_UNLINK:
-                    self._handle_urb_unlink(client_socket, header, seqnum)
-                else:
-                    logger.warning(f"Unknown URB command: 0x{command:08x}")
+
+                    if command == USBIP_CMD_SUBMIT:
+                        self._handle_urb_submit(
+                            client_socket, device, header, seqnum, direction, endpoint
+                        )
+                    elif command == USBIP_CMD_UNLINK:
+                        self._handle_urb_unlink(client_socket, header, seqnum)
+                    else:
+                        logger.warning(f"Unknown URB command: 0x{command:08x}")
+                        break
+
+                except socket.timeout:
+                    continue
+                except (ConnectionResetError, BrokenPipeError):
                     break
+                except Exception as error:
+                    logger.error(f"Error handling URB: {error}")
+                    break
+        finally:
+            # Release interfaces when done
+            self._release_device(device)
+            logger.info(f"URB traffic handling ended for {bus_id}")
 
-            except socket.timeout:
-                continue
-            except (ConnectionResetError, BrokenPipeError):
-                break
-            except Exception as error:
-                logger.error(f"Error handling URB: {error}")
-                break
+    def _release_device(self, device: usb.core.Device) -> None:
+        """Release all interfaces of a device.
 
-        logger.info(f"URB traffic handling ended for {bus_id}")
+        Args:
+            device: The USB device to release.
+        """
+        try:
+            config = device.get_active_configuration()
+            for interface in config:
+                interface_number = interface.bInterfaceNumber
+                try:
+                    usb.util.release_interface(device, interface_number)
+                    logger.debug(f"Released interface {interface_number}")
+                except usb.core.USBError as error:
+                    logger.debug(
+                        f"Could not release interface {interface_number}: {error}"
+                    )
+        except usb.core.USBError as error:
+            logger.debug(f"Could not get configuration for release: {error}")
 
     def _prepare_device_for_use(self, device: usb.core.Device) -> bool:
-        """
-        Prepare a USB device for use by detaching kernel drivers and claiming interfaces.
+        """Prepare a USB device for use by detaching kernel drivers and claiming interfaces.
+
+        On Linux, this detaches kernel drivers to get exclusive access.
+        On macOS, kernel driver detachment is not supported by libusb, so HID
+        devices (mice, keyboards) may not work correctly as the macOS HID
+        driver will still consume events.
 
         Args:
             device: The USB device to prepare.
@@ -503,6 +529,7 @@ class USBIPServer:
             True if device was prepared successfully, False if access was denied.
         """
         access_denied = False
+        kernel_driver_warning_shown = False
 
         try:
             # Try to set configuration if not already set
@@ -526,16 +553,37 @@ class USBIPServer:
             # Detach kernel drivers and claim all interfaces
             for interface in config:
                 interface_number = interface.bInterfaceNumber
+
+                # Try to detach kernel driver
                 try:
                     if device.is_kernel_driver_active(interface_number):
-                        device.detach_kernel_driver(interface_number)
-                        logger.debug(
-                            f"Detached kernel driver from interface {interface_number}"
-                        )
-                except (usb.core.USBError, NotImplementedError):
-                    # Not all platforms support this
-                    pass
+                        try:
+                            device.detach_kernel_driver(interface_number)
+                            logger.info(
+                                f"Detached kernel driver from interface {interface_number}"
+                            )
+                        except usb.core.USBError as error:
+                            if not kernel_driver_warning_shown:
+                                logger.warning(
+                                    f"Could not detach kernel driver from interface "
+                                    f"{interface_number}: {error}. "
+                                    f"HID devices (mice, keyboards) may not work correctly."
+                                )
+                                kernel_driver_warning_shown = True
+                except NotImplementedError:
+                    # macOS doesn't support is_kernel_driver_active/detach_kernel_driver
+                    # via libusb. HID devices will have issues.
+                    if not kernel_driver_warning_shown:
+                        # Check if this looks like a HID device
+                        if interface.bInterfaceClass == 3:  # HID class
+                            logger.warning(
+                                "Cannot detach kernel driver on macOS. "
+                                "HID devices (mice, keyboards) may not work correctly "
+                                "as macOS will still consume input events."
+                            )
+                            kernel_driver_warning_shown = True
 
+                # Claim the interface
                 try:
                     usb.util.claim_interface(device, interface_number)
                     logger.debug(f"Claimed interface {interface_number}")
