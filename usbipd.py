@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2024 abrinkman
+# SPDX-FileCopyrightText: 2025 abrinkman
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
 usbipd - USB over IP daemon utility for macOS.
@@ -9,11 +9,11 @@ import argparse
 import logging
 import sys
 
-import usb.backend.libusb1 as libusb1
 import usb.core
 import usb.util
 
 from binding_configuration import BindingConfiguration
+from libusb_backend import get_backend
 from usb_device import USBDevice
 from usbip_server import USBIPServer
 
@@ -117,7 +117,7 @@ def list_usb_devices() -> list[dict]:
     """
     # Create a fresh backend to force re-enumeration of USB devices
     # This fixes issues where idle devices are not listed
-    backend = libusb1.get_backend()
+    backend = get_backend()
     devices = usb.core.find(find_all=True, backend=backend)
     device_list = []
 
@@ -279,7 +279,7 @@ def _find_device_by_binding(binding: dict) -> tuple[str, usb.core.Device] | None
     Returns:
         A tuple of (bus_id, device) if found, None otherwise.
     """
-    backend = libusb1.get_backend()
+    backend = get_backend()
     devices = usb.core.find(find_all=True, backend=backend)
 
     target_vid = int(binding["vendor_id"], 16)
