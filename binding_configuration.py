@@ -66,9 +66,7 @@ class BindingConfiguration:
         tree = ET.parse(self.config_path)
         return tree.getroot()
 
-    def add_binding(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def add_binding(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Add a device binding to the configuration.
 
@@ -107,9 +105,7 @@ class BindingConfiguration:
         self._write_config(root)
         return True
 
-    def remove_binding(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def remove_binding(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Remove a device binding from the configuration.
 
@@ -182,14 +178,9 @@ class BindingConfiguration:
         if bindings is None:
             return []
 
-        return [
-            self._device_element_to_dict(device)
-            for device in bindings.findall("device")
-        ]
+        return [self._device_element_to_dict(device) for device in bindings.findall("device")]
 
-    def is_bound(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def is_bound(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Check if a device is bound.
 

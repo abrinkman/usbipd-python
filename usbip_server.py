@@ -65,7 +65,7 @@ class USBIPServer:
         self.port = port
         self._server_socket: Optional[socket.socket] = None
         self._running = False
-        self._exported_devices: dict[str, "USBDevice"] = {}
+        self._exported_devices: dict[str, USBDevice] = {}
         self._active_connections: list[threading.Thread] = []
         self._lock = threading.Lock()
 
@@ -155,9 +155,7 @@ class USBIPServer:
             self._server_socket = None
         logger.info("USB/IP server stopped")
 
-    def _handle_client(
-        self, client_socket: socket.socket, client_address: tuple
-    ) -> None:
+    def _handle_client(self, client_socket: socket.socket, client_address: tuple) -> None:
         """
         Handle a client connection.
 
@@ -260,7 +258,7 @@ class USBIPServer:
             The packed device information bytes.
         """
         # Path (256 bytes, zero-padded)
-        path = f"/sys/devices/usb/{bus_id}".encode("utf-8")
+        path = f"/sys/devices/usb/{bus_id}".encode()
         path = path[:255] + b"\x00" * (256 - len(path))
 
         # Bus ID (32 bytes, zero-padded)
@@ -402,7 +400,7 @@ class USBIPServer:
             The packed device information bytes.
         """
         # Path (256 bytes, zero-padded)
-        path = f"/sys/devices/usb/{bus_id}".encode("utf-8")
+        path = f"/sys/devices/usb/{bus_id}".encode()
         path = path[:255] + b"\x00" * (256 - len(path))
 
         # Bus ID (32 bytes, zero-padded)
@@ -462,9 +460,7 @@ class USBIPServer:
 
         # Claim the device for exclusive access
         if not usb_device.claim():
-            logger.error(
-                f"Cannot handle URB traffic for {bus_id} - device claim failed"
-            )
+            logger.error(f"Cannot handle URB traffic for {bus_id} - device claim failed")
             return
 
         logger.info(f"Starting URB traffic handling for {bus_id}")
@@ -548,9 +544,7 @@ class USBIPServer:
                 is_device_to_host = (bmRequestType & 0x80) != 0
                 if not is_device_to_host:
                     # Host to Device (OUT) - read the data
-                    recv_result = self._recv_exact(
-                        client_socket, transfer_buffer_length
-                    )
+                    recv_result = self._recv_exact(client_socket, transfer_buffer_length)
                     if recv_result is None:
                         return
                     transfer_buffer = recv_result
@@ -642,9 +636,7 @@ class USBIPServer:
         Returns:
             A tuple of (response_data, actual_length).
         """
-        bmRequestType, bRequest, wValue, wIndex, wLength = struct.unpack(
-            "<BBHHH", setup
-        )
+        bmRequestType, bRequest, wValue, wIndex, wLength = struct.unpack("<BBHHH", setup)
 
         # Direction is encoded in bmRequestType bit 7:
         # 0 = Host to Device (OUT), 1 = Device to Host (IN)
@@ -727,9 +719,7 @@ class USBIPServer:
             result = device.write(endpoint_addr, data, timeout=5000)
             return b"", result
 
-    def _handle_urb_unlink(
-        self, client_socket: socket.socket, header: bytes, seqnum: int
-    ) -> None:
+    def _handle_urb_unlink(self, client_socket: socket.socket, header: bytes, seqnum: int) -> None:
         """
         Handle USBIP_CMD_UNLINK command.
 
