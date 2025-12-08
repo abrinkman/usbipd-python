@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "usbipd-python"
+name = "usbipd"
 dynamic = ["version"]
-description = "A USB/IP server for sharing USB devices over the network"
+description = "A Python USB/IP server for sharing USB devices over the network"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "GPL-3.0"}
 authors = [
-    {name = "abrinkman", email = "abrinkman@github.com"},
+    {name = "Alexander Brinkman", email = "abrinkman@gmail.com"},
 ]
 keywords = ["usb", "usbip", "network", "device-sharing"]
 classifiers = [
@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -46,7 +47,7 @@ Repository = "https://github.com/abrinkman/usbipd-python.git"
 Issues = "https://github.com/abrinkman/usbipd-python/issues"
 
 [project.scripts]
-usbipd-python = "usbipd:main"
+usbipd = "usbipd:main"
 
 [tool.setuptools]
 py-modules = ["usbipd", "usb_device", "usbip_server", "binding_configuration", "libusb_backend"]
@@ -63,7 +64,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
