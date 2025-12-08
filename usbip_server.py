@@ -6,6 +6,7 @@ import logging
 import socket
 import struct
 import threading
+from typing import Optional
 
 import usb.core
 import usb.util
@@ -59,7 +60,7 @@ class USBIPServer:
         """
         self.host = host
         self.port = port
-        self._server_socket: socket.socket | None = None
+        self._server_socket: Optional[socket.socket] = None
         self._running = False
         self._exported_devices: dict[str, usb.core.Device] = {}
         self._active_connections: list[threading.Thread] = []
@@ -192,7 +193,7 @@ class USBIPServer:
             client_socket.close()
             logger.info(f"Connection closed: {client_address}")
 
-    def _recv_exact(self, sock: socket.socket, length: int) -> bytes | None:
+    def _recv_exact(self, sock: socket.socket, length: int) -> Optional[bytes]:
         """
         Receive exactly the specified number of bytes.
 
