@@ -321,11 +321,12 @@ class USBDeviceManager:
         for device in devices:
             usb_device = USBDevice(device)
 
-            if serial_number is None:
-                # No serial specified, return first match
-                return usb_device
+            # Normalize both to empty string for comparison
+            # (binding stores "" for no serial, USBDevice returns None)
+            search_serial = serial_number or ""
+            device_serial = usb_device.serial_number or ""
 
-            if usb_device.serial_number == serial_number:
+            if search_serial == device_serial:
                 return usb_device
 
         return None
