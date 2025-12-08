@@ -4,6 +4,7 @@
 
 import os
 import xml.etree.ElementTree as ET
+from typing import Optional
 from xml.dom import minidom
 
 
@@ -12,7 +13,7 @@ class BindingConfiguration:
 
     DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/usbipd/bindings.xml")
 
-    def __init__(self, config_path: str | None = None) -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """
         Initialize the BindingConfiguration instance.
 
@@ -140,7 +141,7 @@ class BindingConfiguration:
 
     def get_binding(
         self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> dict | None:
+    ) -> Optional[dict]:
         """
         Get a specific binding by VID:PID:serial.
 

@@ -8,6 +8,7 @@ usbipd - USB over IP daemon utility for macOS.
 import argparse
 import logging
 import sys
+from typing import Optional
 
 import usb.core
 import usb.util
@@ -219,7 +220,7 @@ def command_bind(bus_id: str) -> None:
         sys.exit(1)
 
 
-def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
+def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> None:
     """
     Handle the 'unbind' command to remove USB device binding(s).
 
@@ -269,7 +270,9 @@ def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
         sys.exit(1)
 
 
-def _find_device_by_binding(binding: dict) -> tuple[str, usb.core.Device] | None:
+def _find_device_by_binding(
+    binding: dict,
+) -> Optional[tuple[str, usb.core.Device]]:
     """
     Find a connected USB device matching the binding's VID:PID:serial.
 

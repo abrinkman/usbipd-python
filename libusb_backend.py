@@ -10,12 +10,12 @@ It uses the bundled libusb library from the 'libusb' package on all platforms.
 import os
 import platform
 import sys
-from typing import Any
+from typing import Any, Optional
 
 import usb.backend.libusb1 as libusb1
 
 
-def _get_bundled_libusb_path() -> str | None:
+def _get_bundled_libusb_path() -> Optional[str]:
     """
     Get the path to the bundled libusb library from the 'libusb' package.
 
