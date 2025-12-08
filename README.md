@@ -14,14 +14,19 @@ Copilot assistance. It seems to work, more or less, for simple USB devices like 
 Make sure you have a Python environment, with the required packages present. Or create a venv:
 
 1. Create venv:
+
    ```bash
    python3 -m venv .venv
    ```
+
 2. Load the venv:
+
    ```bash
    source .venv/bin/activate
    ```
+
 3. Install requirements:
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -29,16 +34,22 @@ Make sure you have a Python environment, with the required packages present. Or 
 ## Running the application
 
 1. List USB devices:
+
    ```bash
    ./usbipd.py list
    ```
+
 2. Bind a USB device by its bus ID:
+
    ```bash
     ./usbipd.py bind --bus-id <bus-id>
    ```
+
 3. Start the USBIP server:
+
    ```bash
     sudo ./usbipd.py start
     ```
+
     Note: Root privileges may be required to access USB devices on MacOS.
 4. Connect to the server from a client using USB/IP tools.
