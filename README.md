@@ -48,6 +48,9 @@ Make sure you have a Python environment, with the required packages present. Or 
     ./usbipd.py bind --bus-id <bus-id>
    ```
 
+   Note that the application requires a bus-id, but the bindings are actually stored using the device's VID:PID:serial for persistence, so device binding remains valid even
+   if the bus-id changes. Devices without a serial number are matched by VID:PID only.
+
 3. Start the USBIP server:
 
    ```bash
