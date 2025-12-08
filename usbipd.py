@@ -183,7 +183,7 @@ def command_start() -> None:
             continue
 
         try:
-            server.export_device(usb_device.bus_id, usb_device.device)
+            server.export_device(usb_device)
             print(f"Exported device: {device_id} (at {usb_device.bus_id})")
             exported_count += 1
         except (ValueError, LookupError) as error:

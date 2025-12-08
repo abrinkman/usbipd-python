@@ -6,10 +6,13 @@ import logging
 import socket
 import struct
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import usb.core
 import usb.util
+
+if TYPE_CHECKING:
+    from usb_device import USBDevice
 
 # USB/IP Protocol Constants
 USBIP_VERSION = 0x0111
@@ -62,21 +65,19 @@ class USBIPServer:
         self.port = port
         self._server_socket: Optional[socket.socket] = None
         self._running = False
-        self._exported_devices: dict[str, usb.core.Device] = {}
+        self._exported_devices: dict[str, "USBDevice"] = {}
         self._active_connections: list[threading.Thread] = []
         self._lock = threading.Lock()
 
-    def export_device(self, bus_id: str, device: usb.core.Device) -> None:
-        """
-        Export a USB device for remote access.
+    def export_device(self, usb_device: "USBDevice") -> None:
+        """Export a USB device for remote access.
 
         Args:
-            bus_id: The bus ID of the device (e.g., '1-3').
-            device: The pyusb device object.
+            usb_device: The USBDevice object to export.
         """
         with self._lock:
-            self._exported_devices[bus_id] = device
-            logger.info(f"Exported device: {bus_id}")
+            self._exported_devices[usb_device.bus_id] = usb_device
+            logger.info(f"Exported device: {usb_device.bus_id}")
 
     def unexport_device(self, bus_id: str) -> bool:
         """
@@ -95,12 +96,11 @@ class USBIPServer:
                 return True
             return False
 
-    def get_exported_devices(self) -> dict[str, usb.core.Device]:
-        """
-        Get the list of exported devices.
+    def get_exported_devices(self) -> dict[str, "USBDevice"]:
+        """Get the list of exported devices.
 
         Returns:
-            A dictionary mapping bus IDs to device objects.
+            A dictionary mapping bus IDs to USBDevice objects.
         """
         with self._lock:
             return self._exported_devices.copy()
@@ -232,8 +232,8 @@ class USBIPServer:
         )
 
         # Add device information for each exported device
-        for bus_id, device in devices:
-            response += self._build_device_info(bus_id, device)
+        for bus_id, usb_device in devices:
+            response += self._build_device_info(bus_id, usb_device.device)
 
         client_socket.sendall(response)
         logger.debug(f"Sent device list with {len(devices)} devices")
@@ -341,8 +341,7 @@ class USBIPServer:
             return USB_SPEED_UNKNOWN
 
     def _handle_import_request(self, client_socket: socket.socket, bus_id: str) -> bool:
-        """
-        Handle OP_REQ_IMPORT request.
+        """Handle OP_REQ_IMPORT request.
 
         Args:
             client_socket: The client socket.
@@ -352,9 +351,9 @@ class USBIPServer:
             True if import was successful, False otherwise.
         """
         with self._lock:
-            device = self._exported_devices.get(bus_id)
+            usb_device = self._exported_devices.get(bus_id)
 
-        if device is None:
+        if usb_device is None:
             # Send error response
             response = struct.pack(
                 ">HHI",
@@ -375,7 +374,7 @@ class USBIPServer:
         )
 
         # Add device information (similar to devlist but without interfaces)
-        response += self._build_import_device_info(bus_id, device)
+        response += self._build_import_device_info(bus_id, usb_device.device)
 
         client_socket.sendall(response)
         logger.info(f"Device imported: {bus_id}")
@@ -446,15 +445,15 @@ class USBIPServer:
             bus_id: The bus ID of the imported device.
         """
         with self._lock:
-            device = self._exported_devices.get(bus_id)
+            usb_device = self._exported_devices.get(bus_id)
 
-        if device is None:
+        if usb_device is None:
             return
 
-        # Try to detach kernel driver and claim interfaces
-        if not self._prepare_device_for_use(device):
+        # Claim the device for exclusive access
+        if not usb_device.claim():
             logger.error(
-                f"Cannot handle URB traffic for {bus_id} - device preparation failed"
+                f"Cannot handle URB traffic for {bus_id} - device claim failed"
             )
             return
 
@@ -474,7 +473,12 @@ class USBIPServer:
 
                     if command == USBIP_CMD_SUBMIT:
                         self._handle_urb_submit(
-                            client_socket, device, header, seqnum, direction, endpoint
+                            client_socket,
+                            usb_device.device,
+                            header,
+                            seqnum,
+                            direction,
+                            endpoint,
                         )
                     elif command == USBIP_CMD_UNLINK:
                         self._handle_urb_unlink(client_socket, header, seqnum)
@@ -490,125 +494,9 @@ class USBIPServer:
                     logger.error(f"Error handling URB: {error}")
                     break
         finally:
-            # Release interfaces when done
-            self._release_device(device)
+            # Release the device
+            usb_device.release()
             logger.info(f"URB traffic handling ended for {bus_id}")
-
-    def _release_device(self, device: usb.core.Device) -> None:
-        """Release all interfaces of a device.
-
-        Args:
-            device: The USB device to release.
-        """
-        try:
-            config = device.get_active_configuration()
-            for interface in config:
-                interface_number = interface.bInterfaceNumber
-                try:
-                    usb.util.release_interface(device, interface_number)
-                    logger.debug(f"Released interface {interface_number}")
-                except usb.core.USBError as error:
-                    logger.debug(
-                        f"Could not release interface {interface_number}: {error}"
-                    )
-        except usb.core.USBError as error:
-            logger.debug(f"Could not get configuration for release: {error}")
-
-    def _prepare_device_for_use(self, device: usb.core.Device) -> bool:
-        """Prepare a USB device for use by detaching kernel drivers and claiming interfaces.
-
-        On Linux, this detaches kernel drivers to get exclusive access.
-        On macOS, kernel driver detachment is not supported by libusb, so HID
-        devices (mice, keyboards) may not work correctly as the macOS HID
-        driver will still consume events.
-
-        Args:
-            device: The USB device to prepare.
-
-        Returns:
-            True if device was prepared successfully, False if access was denied.
-        """
-        access_denied = False
-        kernel_driver_warning_shown = False
-
-        try:
-            # Try to set configuration if not already set
-            try:
-                config = device.get_active_configuration()
-            except usb.core.USBError:
-                try:
-                    device.set_configuration()
-                    config = device.get_active_configuration()
-                except usb.core.USBError as error:
-                    if error.errno == 13:  # Access denied
-                        access_denied = True
-                        logger.error(
-                            "Access denied when setting device configuration. "
-                            "On macOS, try running with sudo: sudo ./usbipd.py start"
-                        )
-                    else:
-                        logger.warning(f"Could not set configuration: {error}")
-                    return False
-
-            # Detach kernel drivers and claim all interfaces
-            for interface in config:
-                interface_number = interface.bInterfaceNumber
-
-                # Try to detach kernel driver
-                try:
-                    if device.is_kernel_driver_active(interface_number):
-                        try:
-                            device.detach_kernel_driver(interface_number)
-                            logger.info(
-                                f"Detached kernel driver from interface {interface_number}"
-                            )
-                        except usb.core.USBError as error:
-                            if not kernel_driver_warning_shown:
-                                logger.warning(
-                                    f"Could not detach kernel driver from interface "
-                                    f"{interface_number}: {error}. "
-                                    f"HID devices (mice, keyboards) may not work correctly."
-                                )
-                                kernel_driver_warning_shown = True
-                except NotImplementedError:
-                    # macOS doesn't support is_kernel_driver_active/detach_kernel_driver
-                    # via libusb. HID devices will have issues.
-                    if not kernel_driver_warning_shown:
-                        # Check if this looks like a HID device
-                        if interface.bInterfaceClass == 3:  # HID class
-                            logger.warning(
-                                "Cannot detach kernel driver on macOS. "
-                                "HID devices (mice, keyboards) may not work correctly "
-                                "as macOS will still consume input events."
-                            )
-                            kernel_driver_warning_shown = True
-
-                # Claim the interface
-                try:
-                    usb.util.claim_interface(device, interface_number)
-                    logger.debug(f"Claimed interface {interface_number}")
-                except usb.core.USBError as error:
-                    if error.errno == 13:  # Access denied
-                        access_denied = True
-                        logger.debug(f"Access denied for interface {interface_number}")
-                    else:
-                        logger.warning(
-                            f"Could not claim interface {interface_number}: {error}"
-                        )
-
-        except usb.core.USBError as error:
-            if error.errno == 13:
-                access_denied = True
-            logger.warning(f"Error preparing device: {error}")
-
-        if access_denied:
-            logger.error(
-                "Insufficient permissions to access USB device. "
-                "On macOS, run with sudo: sudo ./usbipd.py start"
-            )
-            return False
-
-        return True
 
     def _handle_urb_submit(
         self,
@@ -619,8 +507,7 @@ class USBIPServer:
         direction: int,
         endpoint: int,
     ) -> None:
-        """
-        Handle USBIP_CMD_SUBMIT command.
+        """Handle USBIP_CMD_SUBMIT command.
 
         Args:
             client_socket: The client socket.

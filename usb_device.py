@@ -185,6 +185,118 @@ class USBDevice:
             "serial": self.serial_number,
         }
 
+    def claim(self) -> bool:
+        """Claim the device for exclusive access.
+
+        Detaches kernel drivers (on Linux) and claims all interfaces.
+        On macOS, kernel driver detachment is not supported by libusb, so HID
+        devices (mice, keyboards) may not work correctly.
+
+        Returns:
+            True if the device was claimed successfully, False otherwise.
+        """
+        logger = logging.getLogger(__name__)
+        access_denied = False
+        kernel_driver_warning_shown = False
+
+        try:
+            # Try to set configuration if not already set
+            try:
+                config = self.device.get_active_configuration()
+            except usb.core.USBError:
+                try:
+                    self.device.set_configuration()
+                    config = self.device.get_active_configuration()
+                except usb.core.USBError as error:
+                    if error.errno == 13:  # Access denied
+                        logger.error(
+                            "Access denied when setting device configuration. "
+                            "Try running with sudo."
+                        )
+                        return False
+                    logger.warning("Could not set configuration: %s", error)
+                    return False
+
+            # Detach kernel drivers and claim all interfaces
+            for interface in config:
+                interface_number = interface.bInterfaceNumber
+
+                # Try to detach kernel driver
+                try:
+                    if self.device.is_kernel_driver_active(interface_number):
+                        try:
+                            self.device.detach_kernel_driver(interface_number)
+                            logger.info(
+                                "Detached kernel driver from interface %d",
+                                interface_number,
+                            )
+                        except usb.core.USBError as error:
+                            if not kernel_driver_warning_shown:
+                                logger.warning(
+                                    "Could not detach kernel driver from interface "
+                                    "%d: %s. HID devices may not work correctly.",
+                                    interface_number,
+                                    error,
+                                )
+                                kernel_driver_warning_shown = True
+                except NotImplementedError:
+                    # macOS doesn't support is_kernel_driver_active/detach_kernel_driver
+                    if not kernel_driver_warning_shown:
+                        if interface.bInterfaceClass == 3:  # HID class
+                            logger.warning(
+                                "Cannot detach kernel driver on macOS. "
+                                "HID devices (mice, keyboards) may not work correctly "
+                                "as macOS will still consume input events."
+                            )
+                            kernel_driver_warning_shown = True
+
+                # Claim the interface
+                try:
+                    usb.util.claim_interface(self.device, interface_number)
+                    logger.debug("Claimed interface %d", interface_number)
+                except usb.core.USBError as error:
+                    if error.errno == 13:  # Access denied
+                        access_denied = True
+                        logger.debug("Access denied for interface %d", interface_number)
+                    else:
+                        logger.warning(
+                            "Could not claim interface %d: %s", interface_number, error
+                        )
+
+        except usb.core.USBError as error:
+            if error.errno == 13:
+                access_denied = True
+            logger.warning("Error claiming device: %s", error)
+
+        if access_denied:
+            logger.error(
+                "Insufficient permissions to access USB device. Try running with sudo."
+            )
+            return False
+
+        return True
+
+    def release(self) -> None:
+        """Release all interfaces of the device.
+
+        Should be called when done using the device to allow other
+        processes to access it.
+        """
+        logger = logging.getLogger(__name__)
+        try:
+            config = self.device.get_active_configuration()
+            for interface in config:
+                interface_number = interface.bInterfaceNumber
+                try:
+                    usb.util.release_interface(self.device, interface_number)
+                    logger.debug("Released interface %d", interface_number)
+                except usb.core.USBError as error:
+                    logger.debug(
+                        "Could not release interface %d: %s", interface_number, error
+                    )
+        except usb.core.USBError as error:
+            logger.debug("Could not get configuration for release: %s", error)
+
     def get_detailed_info(self) -> str:
         """Get detailed device information as a formatted string.
 
