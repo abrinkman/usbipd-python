@@ -7,7 +7,7 @@ name = "usbipd"
 dynamic = ["version"]
 description = "A Python USB/IP server for sharing USB devices over the network"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "GPL-3.0"}
 authors = [
     {name = "Alexander Brinkman", email = "abrinkman@gmail.com"},
@@ -15,11 +15,8 @@ authors = [
 keywords = ["usb", "usbip", "network", "device-sharing"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -53,7 +50,7 @@ usbipd = "usbipd:main"
 py-modules = ["usbipd", "usb_device", "usbip_server", "binding_configuration", "libusb_backend"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]

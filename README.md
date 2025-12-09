@@ -16,7 +16,7 @@ Install from PyPI:
 
 ```bash
 pip install usbipd-python
-usbipd-python --help
+usbipd --help
 ```
 
 ### Developers
