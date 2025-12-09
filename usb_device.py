@@ -13,6 +13,7 @@ import re
 import usb.core
 import usb.util
 
+
 class USBDevice:
     """Wrapper class for USB device access via pyusb.
 
@@ -163,7 +164,7 @@ class USBDevice:
         if self._serial_number:
             return f"{self.vendor_id:04x}:{self.product_id:04x}:{self._serial_number}"
         return f"{self.vendor_id:04x}:{self.product_id:04x}"
-    
+
     def to_dict(self) -> dict[str, str | None]:
         """Get basic device information as a dictionary.
 
