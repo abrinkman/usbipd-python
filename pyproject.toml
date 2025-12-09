@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Topic :: System :: Networking",
     "Development Status :: 3 - Alpha",
@@ -28,7 +29,7 @@ classifiers = [
 
 dependencies = [
     "pyusb>=1.2.1",
-    "libusb>=1.0.26",
+    "libusb>=1.0.29",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ dev = [
     "pip-tools>=7.0.0",
     "ruff>=0.14.0",
     "mypy>=1.0.0",
+    "reuse>=6.2.0",
 ]
 
 [project.urls]

@@ -13,8 +13,6 @@ import re
 import usb.core
 import usb.util
 
-from libusb_backend import get_backend
-
 
 class USBDevice:
     """Wrapper class for USB device access via pyusb.
@@ -360,11 +358,10 @@ class USBDeviceManager:
         Returns:
             List of USBDevice objects for all connected devices.
         """
-        backend = get_backend(fresh=True)
-        devices = usb.core.find(find_all=True, backend=backend)
+        devices = usb.core.find(find_all=True)
         return [USBDevice(device) for device in devices]
 
-    def find_by_bus_id(self, bus_id: str) -> USBDevice | None:
+    def find_by_bus_id(self, bus_id: str) -> "USBDevice" | None:
         """Find a device by its bus ID.
 
         Args:
@@ -379,8 +376,7 @@ class USBDeviceManager:
             self._logger.error("Invalid bus ID: %s", error)
             return None
 
-        backend = get_backend(fresh=True)
-        devices = usb.core.find(find_all=True, backend=backend)
+        devices = usb.core.find(find_all=True)
 
         for device in devices:
             if device.bus == target_bus:
@@ -402,7 +398,7 @@ class USBDeviceManager:
         vendor_id: int,
         product_id: int,
         serial_number: str | None = None,
-    ) -> USBDevice | None:
+    ) -> "USBDevice" | None:
         """Find a device by VID, PID, and optionally serial number.
 
         Args:
@@ -413,12 +409,10 @@ class USBDeviceManager:
         Returns:
             The USBDevice if found, None otherwise.
         """
-        backend = get_backend(fresh=True)
         devices = usb.core.find(
             find_all=True,
             idVendor=vendor_id,
             idProduct=product_id,
-            backend=backend,
         )
 
         for device in devices:
@@ -434,7 +428,7 @@ class USBDeviceManager:
 
         return None
 
-    def find_by_binding(self, binding: dict[str, str]) -> USBDevice | None:
+    def find_by_binding(self, binding: dict[str, str]) -> "USBDevice" | None:
         """Find a device that matches a binding configuration.
 
         The binding dictionary should contain 'vendor_id', 'product_id',

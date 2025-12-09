@@ -7,6 +7,10 @@ Files: .gitignore
 Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
+Files: pyproject.toml
+Copyright: 2025 Alexander Brinkman
+License: GPL-3.0-or-later
+
 Files: requirements*.txt
 Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
@@ -16,6 +20,10 @@ Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 
 Files: .github/copilot-instructions.md
+Copyright: 2025 Alexander Brinkman
+License: GPL-3.0-or-later
+
+Files: .github/*.yml
 Copyright: 2025 Alexander Brinkman
 License: GPL-3.0-or-later
 

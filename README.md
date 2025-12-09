@@ -56,7 +56,7 @@ usbipd --help
 Display all available USB devices:
 
 ```bash
-usbipd-python list
+usbipd list
 ```
 
 ### Bind a Device
@@ -64,24 +64,26 @@ usbipd-python list
 Bind a USB device by its bus ID to make it available for sharing:
 
 ```bash
-usbipd-python bind --bus-id <bus-id>
+usbipd bind --bus-id <bus-id>
 ```
 
-Bindings are stored persistently using the device's VID:PID:serial for future recognition, even if the bus ID changes. Devices without a serial number are matched by VID:PID only.
+Note that although you need to bind using the bus-id, in reality bindings are stored persistently using the device's VID:PID:serial. This means that even if the bus ID changes, devices are still recognized. Devices without a serial number are matched by VID:PID only.
 
 ### Start the Server
 
-Start the USB/IP server (requires root/sudo on macOS):
+For MacOS and perhaps other operating systems you will need to start the server with elevated privileges, as the underlying `libusb` library requires exclusive access to USB devices:
 
 ```bash
-sudo usbipd-python start
+sudo usbipd start
 ```
 
 Add `-v` or `--verbose` for debug output:
 
 ```bash
-sudo usbipd-python -v start
+sudo usbipd -v start
 ```
+
+If your user lacks permissions the application will warn you for this when attaching a device. Please note that these kind of issues can lead to undefined behavior, blue screens or kernel panics on either side. You have been warned!
 
 ### Connect to the Server
 
@@ -107,7 +109,7 @@ mypy --ignore-missing-imports .
 
 ### Project Structure
 
-- `usbipd.py` - Main CLI entry point using `argparse`
+- `usbipd.py` - Main CLI entry point
 - `usb_device.py` - `USBDevice` wrapper class for `pyusb` device access
 - `usbip_server.py` - `USBIPServer` class implementing the USB/IP protocol
 - `binding_configuration.py` - `BindingConfiguration` class for XML-based device binding storage
