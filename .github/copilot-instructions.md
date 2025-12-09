@@ -24,9 +24,9 @@
 - Use descriptive, meaningful names. Avoid single-letter variables except for loop counters.
 
 ### Code Quality
-- Target Python 3.9+ compatibility (use `Optional[T]` from typing, not `T | None`).
+- Target Python 3.11+ compatibility.
 - Use type hints for all function signatures and return types.
-- Use `from typing import Optional` for optional types (Python 3.9 compatibility).
+- Use `from typing import Optional` for optional types (Python 3.11 compatibility).
 - Write modular, reusable code with clear separation of concerns.
 - Handle errors gracefully with appropriate error messages to stderr.
 - Use `argparse` for command-line argument parsing.

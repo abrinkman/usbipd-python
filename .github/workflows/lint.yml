@@ -32,3 +32,6 @@ jobs:
 
       - name: Run mypy type checker
         run: mypy --ignore-missing-imports .
+      
+      - name: Run reuse lint
+        run: reuse lint
