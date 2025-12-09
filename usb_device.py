@@ -167,7 +167,7 @@ class USBDevice:
             return f"{self.vendor_id:04x}:{self.product_id:04x}:{self._serial_number}"
         return f"{self.vendor_id:04x}:{self.product_id:04x}"
 
-    def to_dict(self) -> Dict[str, Optional[str]]:
+    def to_dict(self) -> dict[str, str | None]:
         """Get basic device information as a dictionary.
 
         Returns:
@@ -434,7 +434,7 @@ class USBDeviceManager:
 
         return None
 
-    def find_by_binding(self, binding: Dict[str, str]) -> Optional[USBDevice]:
+    def find_by_binding(self, binding: dict[str, str]) -> USBDevice | None:
         """Find a device that matches a binding configuration.
 
         The binding dictionary should contain 'vendor_id', 'product_id',
