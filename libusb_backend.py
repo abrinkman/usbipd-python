@@ -11,10 +11,9 @@ import platform
 import sys
 from typing import Any
 
-import usb.backend.libusb1 as libusb1
-
 # Import libusb to ensure it's installed (it's a required dependency)
 import libusb
+import usb.backend.libusb1 as libusb1
 
 
 def _get_bundled_libusb_path() -> str:

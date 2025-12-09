@@ -6,11 +6,23 @@
 import argparse
 import logging
 import sys
-from typing import List, Optional
+from importlib.metadata import PackageNotFoundError, version
 
 from binding_configuration import BindingConfiguration
 from usb_device import USBDevice, USBDeviceManager
 from usbip_server import USBIPServer
+
+
+def get_version() -> str:
+    """Get the package version.
+
+    Returns:
+        The version string, or 'unknown' if not installed as a package.
+    """
+    try:
+        return version("usbipd")
+    except PackageNotFoundError:
+        return "unknown (not installed as package)"
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -27,7 +39,7 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
-def print_devices_table(devices: List[USBDevice], config: BindingConfiguration) -> None:
+def print_devices_table(devices: list[USBDevice], config: BindingConfiguration) -> None:
     """Print USB device information in a formatted table.
 
     Args:
@@ -57,12 +69,7 @@ def print_devices_table(devices: List[USBDevice], config: BindingConfiguration) 
         product = (device.product or "Unknown")[:26]
         serial = (device.serial_number or "N/A")[:20]
         print(
-            f"{bus_id:<14} "
-            f"{vid_pid:<12} "
-            f"{manufacturer:<20} "
-            f"{product:<26} "
-            f"{serial:<20} "
-            f"{state:<10}"
+            f"{bus_id:<14} {vid_pid:<12} {manufacturer:<20} {product:<26} {serial:<20} {state:<10}"
         )
 
 
@@ -110,7 +117,7 @@ def command_bind(bus_id: str) -> None:
         print(f"Device is already bound: {bus_id}")
 
 
-def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> None:
+def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
     """Handle the 'unbind' command to remove USB device binding(s).
 
     The bus ID is used to identify the device, but the binding is removed
@@ -155,7 +162,7 @@ def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> No
         sys.exit(1)
 
 
-def command_start(host: Optional[str] = None, ipv4_only: bool = False) -> None:
+def command_start(host: str | None = None, ipv4_only: bool = False) -> None:
     """Handle the 'start' command to start the USBIP server."""
     if host is not None:
         server = USBIPServer(host=host)
@@ -170,10 +177,7 @@ def command_start(host: Optional[str] = None, ipv4_only: bool = False) -> None:
     bindings = config.get_all_bindings()
 
     if not bindings:
-        print(
-            "No devices are bound. Use 'usbipd bind --bus-id <bus-id>' "
-            "to bind devices first."
-        )
+        print("No devices are bound. Use 'usbipd bind --bus-id <bus-id>' to bind devices first.")
         sys.exit(1)
 
     exported_count = 0
@@ -198,10 +202,7 @@ def command_start(host: Optional[str] = None, ipv4_only: bool = False) -> None:
             )
 
     if exported_count == 0:
-        print(
-            "No devices could be exported. "
-            "Check that bound devices are still connected."
-        )
+        print("No devices could be exported. Check that bound devices are still connected.")
         sys.exit(1)
 
     try:
@@ -220,6 +221,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="usbipd",
         description="USB over IP daemon utility for macOS - manage and share USB devices.",
+    )
+
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_version()}",
     )
 
     parser.add_argument(
@@ -260,9 +268,7 @@ def main() -> None:
     )
 
     # Start command
-    start_parser = subparsers.add_parser(
-        "start", help="Start the USBIP server with bound devices"
-    )
+    start_parser = subparsers.add_parser("start", help="Start the USBIP server with bound devices")
     start_group = start_parser.add_mutually_exclusive_group()
     start_group.add_argument(
         "-4",

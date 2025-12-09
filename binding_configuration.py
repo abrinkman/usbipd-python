@@ -4,7 +4,6 @@
 
 import os
 import xml.etree.ElementTree as ET
-from typing import Optional
 from xml.dom import minidom
 
 
@@ -13,7 +12,7 @@ class BindingConfiguration:
 
     DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/usbipd/bindings.xml")
 
-    def __init__(self, config_path: Optional[str] = None) -> None:
+    def __init__(self, config_path: str | None = None) -> None:
         """
         Initialize the BindingConfiguration instance.
 
@@ -66,9 +65,7 @@ class BindingConfiguration:
         tree = ET.parse(self.config_path)
         return tree.getroot()
 
-    def add_binding(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def add_binding(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Add a device binding to the configuration.
 
@@ -107,9 +104,7 @@ class BindingConfiguration:
         self._write_config(root)
         return True
 
-    def remove_binding(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def remove_binding(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Remove a device binding from the configuration.
 
@@ -139,9 +134,7 @@ class BindingConfiguration:
 
         return False
 
-    def get_binding(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> Optional[dict]:
+    def get_binding(self, vendor_id: str, product_id: str, serial_number: str = "") -> dict | None:
         """
         Get a specific binding by VID:PID:serial.
 
@@ -182,14 +175,9 @@ class BindingConfiguration:
         if bindings is None:
             return []
 
-        return [
-            self._device_element_to_dict(device)
-            for device in bindings.findall("device")
-        ]
+        return [self._device_element_to_dict(device) for device in bindings.findall("device")]
 
-    def is_bound(
-        self, vendor_id: str, product_id: str, serial_number: str = ""
-    ) -> bool:
+    def is_bound(self, vendor_id: str, product_id: str, serial_number: str = "") -> bool:
         """
         Check if a device is bound.
 

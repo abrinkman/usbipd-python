@@ -9,7 +9,6 @@ This module provides classes for accessing and managing USB devices:
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
 
 import usb.core
 import usb.util
@@ -35,13 +34,13 @@ class USBDevice:
         """
         self.device = device
         self.bus_id = self.build_bus_id(device)
-        self._manufacturer: Optional[str] = None
-        self._product: Optional[str] = None
-        self._serial_number: Optional[str] = None
+        self._manufacturer: str | None = None
+        self._product: str | None = None
+        self._serial_number: str | None = None
         self._strings_loaded = False
 
     @staticmethod
-    def clean_usb_string(value: Optional[str]) -> Optional[str]:
+    def clean_usb_string(value: str | None) -> str | None:
         """Clean a USB string by removing null characters and whitespace.
 
         USB strings sometimes contain garbage data after null terminators.
@@ -78,7 +77,7 @@ class USBDevice:
         return f"{device.bus}-{device.address}"
 
     @staticmethod
-    def parse_bus_id(bus_id: str) -> Tuple[int, Tuple[int, ...]]:
+    def parse_bus_id(bus_id: str) -> tuple[int, tuple[int, ...]]:
         """Parse a bus ID string into bus number and port numbers.
 
         Args:
@@ -113,9 +112,7 @@ class USBDevice:
 
         try:
             if self.device.iManufacturer:
-                raw_manufacturer = usb.util.get_string(
-                    self.device, self.device.iManufacturer
-                )
+                raw_manufacturer = usb.util.get_string(self.device, self.device.iManufacturer)
                 self._manufacturer = self.clean_usb_string(raw_manufacturer)
         except (usb.core.USBError, ValueError) as error:
             logger.debug("Could not read manufacturer string: %s", error)
@@ -137,27 +134,27 @@ class USBDevice:
     @property
     def vendor_id(self) -> int:
         """Get the vendor ID (VID) of the device."""
-        return self.device.idVendor
+        return int(self.device.idVendor)
 
     @property
     def product_id(self) -> int:
         """Get the product ID (PID) of the device."""
-        return self.device.idProduct
+        return int(self.device.idProduct)
 
     @property
-    def manufacturer(self) -> Optional[str]:
+    def manufacturer(self) -> str | None:
         """Get the manufacturer string of the device."""
         self._load_strings()
         return self._manufacturer
 
     @property
-    def product(self) -> Optional[str]:
+    def product(self) -> str | None:
         """Get the product string of the device."""
         self._load_strings()
         return self._product
 
     @property
-    def serial_number(self) -> Optional[str]:
+    def serial_number(self) -> str | None:
         """Get the serial number string of the device."""
         self._load_strings()
         return self._serial_number
@@ -170,7 +167,7 @@ class USBDevice:
             return f"{self.vendor_id:04x}:{self.product_id:04x}:{self._serial_number}"
         return f"{self.vendor_id:04x}:{self.product_id:04x}"
 
-    def to_dict(self) -> Dict[str, Optional[str]]:
+    def to_dict(self) -> dict[str, str | None]:
         """Get basic device information as a dictionary.
 
         Returns:
@@ -259,9 +256,7 @@ class USBDevice:
                         access_denied = True
                         logger.debug("Access denied for interface %d", interface_number)
                     else:
-                        logger.warning(
-                            "Could not claim interface %d: %s", interface_number, error
-                        )
+                        logger.warning("Could not claim interface %d: %s", interface_number, error)
 
         except usb.core.USBError as error:
             if error.errno == 13:
@@ -269,9 +264,7 @@ class USBDevice:
             logger.warning("Error claiming device: %s", error)
 
         if access_denied:
-            logger.error(
-                "Insufficient permissions to access USB device. Try running with sudo."
-            )
+            logger.error("Insufficient permissions to access USB device. Try running with sudo.")
             return False
 
         return True
@@ -291,9 +284,7 @@ class USBDevice:
                     usb.util.release_interface(self.device, interface_number)
                     logger.debug("Released interface %d", interface_number)
                 except usb.core.USBError as error:
-                    logger.debug(
-                        "Could not release interface %d: %s", interface_number, error
-                    )
+                    logger.debug("Could not release interface %d: %s", interface_number, error)
         except usb.core.USBError as error:
             logger.debug("Could not get configuration for release: %s", error)
 
@@ -363,7 +354,7 @@ class USBDeviceManager:
         """Initialize the USBDeviceManager."""
         self._logger = logging.getLogger(__name__)
 
-    def list_devices(self) -> List[USBDevice]:
+    def list_devices(self) -> list[USBDevice]:
         """List all available USB devices.
 
         Returns:
@@ -373,7 +364,7 @@ class USBDeviceManager:
         devices = usb.core.find(find_all=True, backend=backend)
         return [USBDevice(device) for device in devices]
 
-    def find_by_bus_id(self, bus_id: str) -> Optional[USBDevice]:
+    def find_by_bus_id(self, bus_id: str) -> USBDevice | None:
         """Find a device by its bus ID.
 
         Args:
@@ -410,8 +401,8 @@ class USBDeviceManager:
         self,
         vendor_id: int,
         product_id: int,
-        serial_number: Optional[str] = None,
-    ) -> Optional[USBDevice]:
+        serial_number: str | None = None,
+    ) -> USBDevice | None:
         """Find a device by VID, PID, and optionally serial number.
 
         Args:
@@ -443,7 +434,7 @@ class USBDeviceManager:
 
         return None
 
-    def find_by_binding(self, binding: Dict[str, str]) -> Optional[USBDevice]:
+    def find_by_binding(self, binding: dict[str, str]) -> USBDevice | None:
         """Find a device that matches a binding configuration.
 
         The binding dictionary should contain 'vendor_id', 'product_id',

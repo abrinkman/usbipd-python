@@ -4,58 +4,115 @@
 [![REUSE Compliant](https://img.shields.io/badge/reuse-compliant-green.svg)](https://reuse.software/)
 [![Lint](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml/badge.svg)](https://github.com/abrinkman/usbipd-python/actions/workflows/lint.yml)
 
-A USB/IP server written in Python3 for sharing USB devices over the network, based on usbipd concepts. Works on MacOS using the `pyusb` library, but any system that supports `pyusb` and `libusb` should work.
+A USB/IP server written in Python 3 for sharing USB devices over the network. This implementation uses the `pyusb` library and the `libusb` backend to support cross-platform USB device access on macOS and Linux.
 
-Note: this is a very early proof-of-concept implementation, which was mainly built for learning purposes with
-Copilot assistance. For simple devices it seems to work OK, however for more complex or HID based devices you
-may run into issues. Some will be because of code quality, however other issues are more fundamental. For
-intance, HID devices are handled by the OS kernel drivers on Windows and MacOS and these drivers cannot be
-detached easily without writing OS native code and/or drivers. Contributions are welcome!
+> **Note:** This is an early-stage implementation, primarily created for learning purposes. Simple USB devices generally work well, but more complex or HID-based devices may experience issues. HID devices are managed by OS kernel drivers on macOS and Windows, making them difficult to detach without OS-native code or custom drivers. Contributions are welcome!
 
-## Preparing the environment
+## Installation
 
-Make sure you have a Python environment, with the required packages present. Or create a venv:
+### Users
 
-1. Create venv:
+Install from PyPI:
+
+```bash
+pip install usbipd-python
+usbipd --help
+```
+
+### Developers
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/abrinkman/usbipd-python.git
+   cd usbipd-python
+   ```
+
+2. Create and activate a virtual environment:
 
    ```bash
    python3 -m venv .venv
-   ```
-
-2. Load the venv:
-
-   ```bash
    source .venv/bin/activate
    ```
 
-3. Install requirements:
+3. Install in development mode with dev dependencies:
 
    ```bash
-   pip install -r requirements.txt
+   pip install -e ".[dev]"
    ```
 
-## Running the application
+## System Requirements
 
-1. List USB devices:
+- **Python:** 3.9 or higher
+- **libusb:** Install using your system package manager
+  - macOS: `brew install libusb`
+  - Linux (Debian/Ubuntu): `sudo apt-get install libusb-1.0-0-dev`
+  - Linux (Fedora/RHEL): `sudo dnf install libusbx-devel`
 
-   ```bash
-   ./usbipd.py list
-   ```
+## Usage
 
-2. Bind a USB device by its bus ID:
+### List USB Devices
 
-   ```bash
-    ./usbipd.py bind --bus-id <bus-id>
-   ```
+Display all available USB devices:
 
-   Note that the application requires a bus-id, but the bindings are actually stored using the device's VID:PID:serial for persistence, so device binding remains valid even
-   if the bus-id changes. Devices without a serial number are matched by VID:PID only.
+```bash
+usbipd-python list
+```
 
-3. Start the USBIP server:
+### Bind a Device
 
-   ```bash
-    sudo ./usbipd.py start
-    ```
+Bind a USB device by its bus ID to make it available for sharing:
 
-    Note: Root privileges may be required to access USB devices on MacOS.
-4. Connect to the server from a client using USB/IP tools.
+```bash
+usbipd-python bind --bus-id <bus-id>
+```
+
+Bindings are stored persistently using the device's VID:PID:serial for future recognition, even if the bus ID changes. Devices without a serial number are matched by VID:PID only.
+
+### Start the Server
+
+Start the USB/IP server (requires root/sudo on macOS):
+
+```bash
+sudo usbipd-python start
+```
+
+Add `-v` or `--verbose` for debug output:
+
+```bash
+sudo usbipd-python -v start
+```
+
+### Connect to the Server
+
+Use a USB/IP client on another machine to connect and access shared devices.
+
+## Development
+
+### Code Quality
+
+Run linting and formatting checks using `ruff`:
+
+```bash
+ruff check .          # Check for linting issues
+ruff format --check . # Check code formatting
+ruff format .         # Auto-format code
+```
+
+Run type checking:
+
+```bash
+mypy --ignore-missing-imports .
+```
+
+### Project Structure
+
+- `usbipd.py` - Main CLI entry point using `argparse`
+- `usb_device.py` - `USBDevice` wrapper class for `pyusb` device access
+- `usbip_server.py` - `USBIPServer` class implementing the USB/IP protocol
+- `binding_configuration.py` - `BindingConfiguration` class for XML-based device binding storage
+- `libusb_backend.py` - Cross-platform libusb backend loader for `pyusb`
+
+### License
+
+Licensed under GPL-3.0. See [LICENSE](LICENSE) for details.
