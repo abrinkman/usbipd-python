@@ -6,7 +6,7 @@ import logging
 import socket
 import struct
 import threading
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import usb.core
 import usb.util
@@ -63,7 +63,7 @@ class USBIPServer:
         """
         self.host = host
         self.port = port
-        self._server_socket: Optional[socket.socket] = None
+        self._server_socket: socket.socket | None = None
         self._running = False
         self._exported_devices: dict[str, USBDevice] = {}
         self._active_connections: list[threading.Thread] = []
@@ -142,7 +142,7 @@ class USBIPServer:
                     )
                     client_thread.start()
                     self._active_connections.append(client_thread)
-                except socket.timeout:
+                except TimeoutError:
                     continue
             except OSError:
                 break
@@ -201,7 +201,7 @@ class USBIPServer:
             client_socket.close()
             logger.info(f"Connection closed: {client_address}")
 
-    def _recv_exact(self, sock: socket.socket, length: int) -> Optional[bytes]:
+    def _recv_exact(self, sock: socket.socket, length: int) -> bytes | None:
         """
         Receive exactly the specified number of bytes.
 
@@ -492,7 +492,7 @@ class USBIPServer:
                         logger.warning(f"Unknown URB command: 0x{command:08x}")
                         break
 
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 except (ConnectionResetError, BrokenPipeError):
                     break

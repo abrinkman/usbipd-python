@@ -7,7 +7,6 @@ import argparse
 import logging
 import sys
 from importlib.metadata import PackageNotFoundError, version
-from typing import Optional
 
 from binding_configuration import BindingConfiguration
 from usb_device import USBDevice, USBDeviceManager
@@ -21,7 +20,7 @@ def get_version() -> str:
         The version string, or 'unknown' if not installed as a package.
     """
     try:
-        return version("usbipd-python")
+        return version("usbipd")
     except PackageNotFoundError:
         return "unknown (not installed as package)"
 
@@ -118,7 +117,7 @@ def command_bind(bus_id: str) -> None:
         print(f"Device is already bound: {bus_id}")
 
 
-def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> None:
+def command_unbind(bus_id: str | None = None, unbind_all: bool = False) -> None:
     """Handle the 'unbind' command to remove USB device binding(s).
 
     The bus ID is used to identify the device, but the binding is removed
@@ -163,7 +162,7 @@ def command_unbind(bus_id: Optional[str] = None, unbind_all: bool = False) -> No
         sys.exit(1)
 
 
-def command_start(host: Optional[str] = None, ipv4_only: bool = False) -> None:
+def command_start(host: str | None = None, ipv4_only: bool = False) -> None:
     """Handle the 'start' command to start the USBIP server."""
     if host is not None:
         server = USBIPServer(host=host)
