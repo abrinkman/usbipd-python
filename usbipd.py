@@ -21,7 +21,7 @@ def get_version() -> str:
         The version string, or 'unknown' if not installed as a package.
     """
     try:
-        return version("usbipd-python")
+        return version("usbipd")
     except PackageNotFoundError:
         return "unknown (not installed as package)"
 
