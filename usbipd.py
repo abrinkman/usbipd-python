@@ -54,7 +54,7 @@ def print_devices_table(devices: list[USBDevice], config: BindingConfiguration) 
         f"{'BUSID':<14} {'VID:PID':<12} {'Manufacturer':<20} {'Product':<26} "
         f"{'Serial':<20} {'State':<10}"
     )
-    print("-" * 105)
+    print("-" * 110)
 
     for device in devices:
         vid_pid = f"{device.vendor_id:04x}:{device.product_id:04x}"

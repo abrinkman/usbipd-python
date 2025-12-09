@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
     "pyusb>=1.2.1",
-    "libusb>=1.0.26",
+    "libusb>=1.0.29",
 ]
 
 [project.optional-dependencies]

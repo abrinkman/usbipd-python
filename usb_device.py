@@ -13,9 +13,6 @@ import re
 import usb.core
 import usb.util
 
-from libusb_backend import get_backend
-
-
 class USBDevice:
     """Wrapper class for USB device access via pyusb.
 
@@ -166,7 +163,7 @@ class USBDevice:
         if self._serial_number:
             return f"{self.vendor_id:04x}:{self.product_id:04x}:{self._serial_number}"
         return f"{self.vendor_id:04x}:{self.product_id:04x}"
-
+    
     def to_dict(self) -> dict[str, str | None]:
         """Get basic device information as a dictionary.
 
@@ -360,8 +357,7 @@ class USBDeviceManager:
         Returns:
             List of USBDevice objects for all connected devices.
         """
-        backend = get_backend(fresh=True)
-        devices = usb.core.find(find_all=True, backend=backend)
+        devices = usb.core.find(find_all=True)
         return [USBDevice(device) for device in devices]
 
     def find_by_bus_id(self, bus_id: str) -> "USBDevice" | None:
@@ -379,8 +375,7 @@ class USBDeviceManager:
             self._logger.error("Invalid bus ID: %s", error)
             return None
 
-        backend = get_backend(fresh=True)
-        devices = usb.core.find(find_all=True, backend=backend)
+        devices = usb.core.find(find_all=True)
 
         for device in devices:
             if device.bus == target_bus:
@@ -413,12 +408,10 @@ class USBDeviceManager:
         Returns:
             The USBDevice if found, None otherwise.
         """
-        backend = get_backend(fresh=True)
         devices = usb.core.find(
             find_all=True,
             idVendor=vendor_id,
             idProduct=product_id,
-            backend=backend,
         )
 
         for device in devices:
