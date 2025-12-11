@@ -1,0 +1,58 @@
+version = 1
+SPDX-PackageName = "usbipd-python"
+SPDX-PackageSupplier = "Alexander Brinkman <https://github.com/abrinkman>"
+SPDX-PackageDownloadLocation = "https://github.com/abrinkman/usbipd-python"
+
+[[annotations]]
+path = ".gitignore"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ".cursorignore"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = "pyproject.toml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = "requirements**.txt"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = "README.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ".github/copilot-instructions.md"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ".github/**.yml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ".github/workflows/**.yml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ".cursor/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Alexander Brinkman"
+SPDX-License-Identifier = "GPL-3.0-or-later"
