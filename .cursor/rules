@@ -2,6 +2,7 @@ Honor `.github/copilot-instructions.md`; keep USB/IP protocol details accurate (
 Target Python 3.11+; use type hints and Google-style docstrings for new/changed functions.
 Use argparse for CLI changes; preserve `-v/--verbose` and helpful `--help` output.
 Run `ruff check .` and `ruff format .` before finishing; prefer small, focused diffs with tests when feasible.
+Run `reuse lint` after adding or modifying files to keep licensing headers consistent.
 Never run or suggest privileged USB operations in tooling (no `sudo`/device claiming); prefer mocks or dry-run examples.
 Favor pytest for tests; mock USB devices and libusb interactions rather than touching hardware.
 Keep license notices intact; do not change GPL licensing text without approval.
