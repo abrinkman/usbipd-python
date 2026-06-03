@@ -9,6 +9,7 @@ This module provides classes for accessing and managing USB devices:
 
 import logging
 import re
+from typing import Optional
 
 import usb.core
 import usb.util
@@ -361,7 +362,7 @@ class USBDeviceManager:
         devices = usb.core.find(find_all=True)
         return [USBDevice(device) for device in devices]
 
-    def find_by_bus_id(self, bus_id: str) -> "USBDevice" | None:
+    def find_by_bus_id(self, bus_id: str) -> Optional["USBDevice"]:
         """Find a device by its bus ID.
 
         Args:
@@ -397,8 +398,8 @@ class USBDeviceManager:
         self,
         vendor_id: int,
         product_id: int,
-        serial_number: str | None = None,
-    ) -> "USBDevice" | None:
+        serial_number: Optional[str] = None,
+    ) -> Optional["USBDevice"]:
         """Find a device by VID, PID, and optionally serial number.
 
         Args:
@@ -428,7 +429,7 @@ class USBDeviceManager:
 
         return None
 
-    def find_by_binding(self, binding: dict[str, str]) -> "USBDevice" | None:
+    def find_by_binding(self, binding: dict[str, str]) -> Optional["USBDevice"]:
         """Find a device that matches a binding configuration.
 
         The binding dictionary should contain 'vendor_id', 'product_id',
