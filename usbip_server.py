@@ -47,7 +47,60 @@ USB_SPEED_SUPER = 5
 # Default server port
 DEFAULT_PORT = 3240
 
+# Poll slice (ms) for pending IN endpoints. Because each URB runs in its own
+# thread this only bounds how quickly a pending IN read notices an unlink /
+# shutdown; it does NOT affect throughput or cause head-of-line blocking.
+_IN_POLL_MS = 200
+
 logger = logging.getLogger(__name__)
+
+
+class _PendingUrb:
+    """Tracks an in-flight URB so USBIP_CMD_UNLINK can cancel it.
+
+    ``lock`` + ``completed`` enforce exactly-once completion: whichever of the
+    worker (RET_SUBMIT) or the unlink handler (RET_UNLINK) gets there first
+    claims the URB; the other must not also complete it. A late RET_SUBMIT for
+    an already-unlinked seqnum makes the Linux vhci_hcd abort the whole
+    connection, so this invariant is what keeps the port from dropping.
+    """
+
+    __slots__ = ("cancel", "endpoint", "lock", "completed")
+
+    def __init__(self, endpoint: int) -> None:
+        self.cancel = threading.Event()
+        self.endpoint = endpoint
+        self.lock = threading.Lock()
+        self.completed = False
+
+
+class _UrbConnection:
+    """Per-client URB processing context.
+
+    Serialises writes on the shared socket, tracks pending URBs so they can be
+    unlinked, and hands out per-endpoint locks so transfers on *different*
+    endpoints run concurrently while transfers on the *same* endpoint stay
+    ordered (important so serial byte streams are never reordered).
+    """
+
+    def __init__(self, sock: socket.socket, device: "usb.core.Device") -> None:
+        self.sock = sock
+        self.device = device
+        self.send_lock = threading.Lock()
+        self.pending_lock = threading.Lock()
+        self.pending: dict[int, _PendingUrb] = {}
+        self._ep_locks: dict[int, threading.Lock] = {}
+        self._ep_guard = threading.Lock()
+        self.stop = threading.Event()
+        self.workers: list[threading.Thread] = []
+
+    def endpoint_lock(self, key: int) -> threading.Lock:
+        with self._ep_guard:
+            lock = self._ep_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._ep_locks[key] = lock
+            return lock
 
 
 class USBIPServer:
@@ -134,6 +187,7 @@ class USBIPServer:
                 self._server_socket.settimeout(1.0)
                 try:
                     client_socket, client_address = self._server_socket.accept()
+                    self._configure_client_socket(client_socket)
                     logger.info(f"Connection from {client_address}")
                     client_thread = threading.Thread(
                         target=self._handle_client,
@@ -146,6 +200,23 @@ class USBIPServer:
                     continue
             except OSError:
                 break
+
+    @staticmethod
+    def _configure_client_socket(client_socket: socket.socket) -> None:
+        """Disable Nagle's algorithm on an accepted client connection.
+
+        USB/IP is a latency-sensitive request/response protocol made up of many
+        small PDUs. With Nagle enabled, small URB responses are held back waiting
+        for an ACK; combined with the peer's delayed-ACK timer this adds tens to
+        hundreds of milliseconds per URB. That is enough to break timing-critical
+        sequences such as the DTR/RTS auto-reset serial bootloaders rely on (the
+        device then never enters download mode). The Linux usbip userspace sets
+        TCP_NODELAY for the same reason.
+        """
+        try:
+            client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            logger.debug("Could not enable TCP_NODELAY on client socket")
 
     def stop(self) -> None:
         """Stop the USB/IP server."""
@@ -448,6 +519,12 @@ class USBIPServer:
     def _handle_urb_traffic(self, client_socket: socket.socket, bus_id: str) -> None:
         """Handle URB traffic for an imported device.
 
+        The receive loop only touches the socket (parse the header and read any
+        OUT payload) and then hands each URB to a worker thread. This keeps a
+        blocking / pending IN read from head-of-line blocking control and OUT
+        transfers, and lets IN URBs stay pending like real hardware until data
+        arrives or the client unlinks them.
+
         Args:
             client_socket: The client socket.
             bus_id: The bus ID of the imported device.
@@ -464,6 +541,7 @@ class USBIPServer:
             return
 
         logger.info(f"Starting URB traffic handling for {bus_id}")
+        conn = _UrbConnection(client_socket, usb_device.device)
 
         try:
             while self._running:
@@ -478,16 +556,9 @@ class USBIPServer:
                     )
 
                     if command == USBIP_CMD_SUBMIT:
-                        self._handle_urb_submit(
-                            client_socket,
-                            usb_device.device,
-                            header,
-                            seqnum,
-                            direction,
-                            endpoint,
-                        )
+                        self._dispatch_urb_submit(conn, header, seqnum, direction, endpoint)
                     elif command == USBIP_CMD_UNLINK:
-                        self._handle_urb_unlink(client_socket, header, seqnum)
+                        self._handle_urb_unlink(conn, header, seqnum)
                     else:
                         logger.warning(f"Unknown URB command: 0x{command:08x}")
                         break
@@ -500,30 +571,31 @@ class USBIPServer:
                     logger.error(f"Error handling URB: {error}")
                     break
         finally:
-            # Release the device
+            # Tear down: stop workers and cancel any pending IN URBs so their
+            # threads wake and exit, then release the device.
+            conn.stop.set()
+            with conn.pending_lock:
+                for urb in conn.pending.values():
+                    urb.cancel.set()
+            for worker in list(conn.workers):
+                worker.join(timeout=1.0)
             usb_device.release()
             logger.info(f"URB traffic handling ended for {bus_id}")
 
-    def _handle_urb_submit(
+    def _dispatch_urb_submit(
         self,
-        client_socket: socket.socket,
-        device: usb.core.Device,
+        conn: "_UrbConnection",
         header: bytes,
         seqnum: int,
         direction: int,
         endpoint: int,
     ) -> None:
-        """Handle USBIP_CMD_SUBMIT command.
+        """Parse a SUBMIT, read any OUT payload from the socket (in stream
+        order), then hand the URB to a worker thread for the actual transfer.
 
-        Args:
-            client_socket: The client socket.
-            device: The USB device.
-            header: The full header bytes.
-            seqnum: The sequence number.
-            direction: The transfer direction.
-            endpoint: The endpoint number.
+        Runs in the single receive thread so socket reads stay ordered; the
+        (possibly blocking / pending) USB transfer happens off-thread.
         """
-        # Parse the rest of the submit header
         (
             transfer_flags,
             transfer_buffer_length,
@@ -534,57 +606,149 @@ class USBIPServer:
 
         setup = header[40:48]
 
-        # For control transfers, check the setup packet to determine if we need to read data
-        # For bulk/interrupt OUT transfers, read the data buffer
+        # Read the outbound data buffer here, while we own the socket stream.
         transfer_buffer = b""
         if transfer_buffer_length > 0:
             if endpoint == 0:
-                # Control transfer - check bmRequestType for direction
                 bmRequestType = setup[0]
                 is_device_to_host = (bmRequestType & 0x80) != 0
                 if not is_device_to_host:
-                    # Host to Device (OUT) - read the data
-                    recv_result = self._recv_exact(client_socket, transfer_buffer_length)
+                    recv_result = self._recv_exact(conn.sock, transfer_buffer_length)
                     if recv_result is None:
                         return
                     transfer_buffer = recv_result
             elif direction == USBIP_DIR_OUT:
-                # Bulk/Interrupt OUT - read the data
-                recv_result = self._recv_exact(client_socket, transfer_buffer_length)
+                recv_result = self._recv_exact(conn.sock, transfer_buffer_length)
                 if recv_result is None:
                     return
                 transfer_buffer = recv_result
 
-        # Execute the USB transfer
+        urb = _PendingUrb(endpoint)
+        with conn.pending_lock:
+            conn.pending[seqnum] = urb
+
+        worker = threading.Thread(
+            target=self._process_urb,
+            args=(
+                conn,
+                urb,
+                seqnum,
+                direction,
+                endpoint,
+                setup,
+                transfer_buffer,
+                transfer_buffer_length,
+                start_frame,
+                number_of_packets,
+            ),
+            daemon=True,
+        )
+        conn.workers.append(worker)
+        worker.start()
+
+        # Keep the worker handle list from growing without bound.
+        if len(conn.workers) > 64:
+            conn.workers[:] = [w for w in conn.workers if w.is_alive()]
+
+    def _process_urb(
+        self,
+        conn: "_UrbConnection",
+        urb: "_PendingUrb",
+        seqnum: int,
+        direction: int,
+        endpoint: int,
+        setup: bytes,
+        transfer_buffer: bytes,
+        transfer_buffer_length: int,
+        start_frame: int,
+        number_of_packets: int,
+    ) -> None:
+        """Execute one URB in its own thread and send RET_SUBMIT.
+
+        Transfers are serialised per endpoint (so same-endpoint data keeps its
+        order) but run concurrently across different endpoints, so a pending IN
+        read never blocks control/OUT traffic.
+        """
+        # Per-endpoint serialisation key: control shares EP0; bulk/interrupt is
+        # keyed by address + direction.
+        if endpoint == 0:
+            ep_key = 0
+        else:
+            ep_key = (endpoint & 0x0F) | (0x80 if direction == USBIP_DIR_IN else 0x00)
+
         actual_length = 0
         status = 0
         response_data = b""
 
         try:
-            if endpoint == 0:
-                # Control transfer
-                response_data, actual_length = self._do_control_transfer(
-                    device, setup, transfer_buffer, transfer_buffer_length, direction
-                )
-            else:
-                # Bulk/Interrupt transfer
-                response_data, actual_length = self._do_bulk_interrupt_transfer(
-                    device, endpoint, transfer_buffer, transfer_buffer_length, direction
-                )
-        except usb.core.USBTimeoutError:
-            # Timeout - return ETIMEDOUT (-110 on Linux)
-            logger.debug(f"USB timeout on endpoint {endpoint}")
-            status = -110
-        except usb.core.USBError as error:
-            logger.debug(f"USB error on endpoint {endpoint}: {error}")
-            # Map common USB errors to Linux errno values
-            if error.errno is not None:
-                status = -error.errno
-            else:
-                # Generic I/O error
-                status = -5  # EIO
+            with conn.endpoint_lock(ep_key):
+                if urb.cancel.is_set() or conn.stop.is_set():
+                    self._finish_urb(conn, seqnum)
+                    return
+                try:
+                    if endpoint == 0:
+                        response_data, actual_length = self._do_control_transfer(
+                            conn.device,
+                            setup,
+                            transfer_buffer,
+                            transfer_buffer_length,
+                            direction,
+                        )
+                    else:
+                        result = self._do_bulk_interrupt_transfer(
+                            conn.device,
+                            endpoint,
+                            transfer_buffer,
+                            transfer_buffer_length,
+                            direction,
+                            cancel=urb.cancel,
+                        )
+                        if result is None:
+                            # Unlinked while pending: the client already got a
+                            # RET_UNLINK, so do not send a RET_SUBMIT.
+                            self._finish_urb(conn, seqnum)
+                            return
+                        response_data, actual_length = result
+                except usb.core.USBTimeoutError:
+                    logger.debug(f"USB timeout on endpoint {endpoint}")
+                    status = -110
+                except usb.core.USBError as error:
+                    logger.debug(f"USB error on endpoint {endpoint}: {error}")
+                    status = -error.errno if error.errno is not None else -5
+        except Exception as error:  # worker must never die silently
+            logger.error(f"URB worker error seqnum={seqnum}: {error}")
+            status = -5
 
-        # Build response
+        # Exactly-once completion: if an UNLINK already claimed this URB, do
+        # NOT send a RET_SUBMIT. A late RET_SUBMIT for an unlinked seqnum makes
+        # vhci_hcd abort the connection ("cannot find a urb of seqnum ..."),
+        # which is what dropped the serial port during flashing. Hold urb.lock
+        # across the check + send so it is atomic vs. the unlink handler.
+        with urb.lock:
+            if not urb.completed:
+                urb.completed = True
+                self._send_ret_submit(
+                    conn,
+                    seqnum,
+                    status,
+                    actual_length,
+                    response_data,
+                    start_frame,
+                    number_of_packets,
+                )
+        self._finish_urb(conn, seqnum)
+
+    def _send_ret_submit(
+        self,
+        conn: "_UrbConnection",
+        seqnum: int,
+        status: int,
+        actual_length: int,
+        response_data: bytes,
+        start_frame: int,
+        number_of_packets: int,
+    ) -> None:
+        """Serialise the RET_SUBMIT write on the shared socket."""
         response = struct.pack(
             ">IIIII",
             USBIP_RET_SUBMIT,
@@ -593,7 +757,6 @@ class USBIPServer:
             0,  # direction
             0,  # endpoint
         )
-
         response += struct.pack(
             ">iI I I i",
             status,
@@ -602,18 +765,26 @@ class USBIPServer:
             number_of_packets,
             0,  # error_count
         )
-
         # Padding (8 bytes)
         response += b"\x00" * 8
-
         # Add response data for IN transfers (including control IN transfers)
         if actual_length > 0 and len(response_data) > 0:
             response += response_data[:actual_length]
 
-        client_socket.sendall(response)
+        with conn.send_lock:
+            try:
+                conn.sock.sendall(response)
+            except OSError:
+                conn.stop.set()
+                return
         logger.debug(
             f"Sent URB response: seqnum={seqnum}, status={status}, actual_length={actual_length}"
         )
+
+    def _finish_urb(self, conn: "_UrbConnection", seqnum: int) -> None:
+        """Remove a completed/cancelled URB from the pending registry."""
+        with conn.pending_lock:
+            conn.pending.pop(seqnum, None)
 
     def _do_control_transfer(
         self,
@@ -683,9 +854,16 @@ class USBIPServer:
         data: bytes,
         length: int,
         direction: int,
-    ) -> tuple[bytes, int]:
+        cancel: "threading.Event | None" = None,
+    ) -> "tuple[bytes, int] | None":
         """
         Execute a bulk or interrupt transfer.
+
+        For IN transfers the URB is kept *pending* (polled in coarse slices) and
+        only completes when data arrives or ``cancel`` is set (the client sent
+        USBIP_CMD_UNLINK or the connection is closing). This mirrors real
+        hardware, which just NAKs an IN endpoint that has no data rather than
+        completing the URB with an error.
 
         Args:
             device: The USB device.
@@ -693,9 +871,11 @@ class USBIPServer:
             data: The data buffer for OUT transfers.
             length: The expected transfer length.
             direction: The transfer direction (USBIP_DIR_IN or USBIP_DIR_OUT).
+            cancel: Event set when the URB is unlinked / the connection closes.
 
         Returns:
-            A tuple of (response_data, actual_length).
+            A tuple of (response_data, actual_length), or ``None`` if the URB
+            was cancelled while still pending (caller must not send RET_SUBMIT).
         """
         # Construct the full endpoint address with direction bit
         if direction == USBIP_DIR_IN:
@@ -703,14 +883,18 @@ class USBIPServer:
             logger.debug(
                 f"Bulk/Interrupt IN transfer: endpoint=0x{endpoint_addr:02x}, length={length}"
             )
-            try:
-                # Use a shorter timeout for interrupt endpoints to avoid blocking
-                result = device.read(endpoint_addr, length, timeout=1000)
-                return bytes(result), len(result)
-            except usb.core.USBTimeoutError:
-                # Timeout is normal for interrupt endpoints with no data
-                logger.debug(f"Read timeout on endpoint 0x{endpoint_addr:02x}")
-                raise
+            # Stay pending like real hardware. Because each URB runs in its own
+            # thread, blocking here does not stall other endpoints or control
+            # transfers, so we poll in coarse slices only to notice cancellation.
+            while cancel is None or not cancel.is_set():
+                if not self._running:
+                    return None
+                try:
+                    result = device.read(endpoint_addr, length, timeout=_IN_POLL_MS)
+                    return bytes(result), len(result)
+                except usb.core.USBTimeoutError:
+                    continue  # no data yet -> keep the URB pending
+            return None  # unlinked while pending: do not complete
         else:
             endpoint_addr = endpoint & 0x0F  # Clear direction bit for OUT
             logger.debug(
@@ -719,18 +903,13 @@ class USBIPServer:
             result = device.write(endpoint_addr, data, timeout=5000)
             return b"", result
 
-    def _handle_urb_unlink(self, client_socket: socket.socket, header: bytes, seqnum: int) -> None:
-        """
-        Handle USBIP_CMD_UNLINK command.
+    def _send_ret_unlink(self, conn: "_UrbConnection", seqnum: int, status: int = -104) -> None:
+        """Serialise a RET_UNLINK write on the shared socket.
 
-        Args:
-            client_socket: The client socket.
-            header: The full header bytes.
-            seqnum: The sequence number.
+        ``seqnum`` is the UNLINK command's own seqnum; status defaults to
+        -ECONNRESET (-104), the value the Linux stub uses for a successful
+        unlink.
         """
-        unlink_seqnum = struct.unpack(">I", header[20:24])[0]
-
-        # Build response (we don't actually track pending URBs in this simple implementation)
         response = struct.pack(
             ">IIIII",
             USBIP_RET_UNLINK,
@@ -739,12 +918,40 @@ class USBIPServer:
             0,  # direction
             0,  # endpoint
         )
-
-        # Status: -ECONNRESET (-104) for successful unlink
-        response += struct.pack(">i", -104)
-
+        response += struct.pack(">i", status)
         # Padding (24 bytes)
         response += b"\x00" * 24
+        with conn.send_lock:
+            try:
+                conn.sock.sendall(response)
+            except OSError:
+                conn.stop.set()
 
-        client_socket.sendall(response)
+    def _handle_urb_unlink(self, conn: "_UrbConnection", header: bytes, seqnum: int) -> None:
+        """
+        Handle USBIP_CMD_UNLINK command: claim the target URB's completion so
+        its worker cannot send a (now-fatal) late RET_SUBMIT, wake any pending
+        IN read, and acknowledge with RET_UNLINK.
+
+        Args:
+            conn: The per-client URB connection context.
+            header: The full header bytes.
+            seqnum: The sequence number of this UNLINK command.
+        """
+        unlink_seqnum = struct.unpack(">I", header[20:24])[0]
+
+        with conn.pending_lock:
+            target = conn.pending.get(unlink_seqnum)
+
+        if target is not None:
+            # Claim completion and ack under the URB lock so we serialise
+            # against the worker's RET_SUBMIT on the same URB (exactly-once).
+            with target.lock:
+                target.completed = True
+                target.cancel.set()
+                self._send_ret_unlink(conn, seqnum)
+        else:
+            # URB already completed and retired; still acknowledge the unlink.
+            self._send_ret_unlink(conn, seqnum)
+
         logger.debug(f"Unlinked URB seqnum={unlink_seqnum}")

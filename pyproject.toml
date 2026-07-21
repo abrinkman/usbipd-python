@@ -38,6 +38,7 @@ dev = [
     "ruff>=0.14.0",
     "mypy>=1.0.0",
     "reuse>=6.2.0",
+    "pytest>=7.0.0",
 ]
 
 [project.urls]
@@ -50,6 +51,10 @@ usbipd = "usbipd:main"
 
 [tool.setuptools]
 py-modules = ["usbipd", "usb_device", "usbip_server", "binding_configuration", "libusb_backend"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [tool.ruff]
 target-version = "py311"
